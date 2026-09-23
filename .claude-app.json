@@ -1,0 +1,7 @@
+{
+  "name": "Pointer",
+  "type": "native",
+  "entry": "build.sh",
+  "open": "~/Applications/Pointer.app",
+  "description": "Menu-bar Mac app: press ⌃⌥C, talk while you drag over the screen, and the screenshot plus transcript land in your last-used terminal or Claude window. Build and launch with ./build.sh"
+}

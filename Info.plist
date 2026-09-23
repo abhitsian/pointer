@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>Pointer</string>
+	<key>CFBundleIconFile</key>
+	<string>Pointer</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.vaibhav.pointer</string>
+	<key>CFBundleName</key>
+	<string>Pointer</string>
+	<key>CFBundleDisplayName</key>
+	<string>Pointer</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pointer listens while you describe what's on screen.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Pointer turns what you say into text for your assistant.</string>
+</dict>
+</plist>

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointer · Recordings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: oklch(97.2% 0.011 75);
+  --paper-2: oklch(94.6% 0.016 72);
+  --ink: oklch(23% 0.012 60);
+  --ink-2: oklch(40% 0.018 62);
+  --ink-3: oklch(56% 0.02 66);
+  --line: oklch(89% 0.018 72);
+  --tan-wash: oklch(91% 0.04 75);
+  --ember: oklch(58% 0.145 48);
+  --stage: oklch(17% 0.01 60);
+  --shadow: 0 1px 1px oklch(30% 0.03 60 / 0.06), 0 6px 18px -8px oklch(30% 0.04 60 / 0.22), 0 22px 44px -28px oklch(30% 0.05 60 / 0.35);
+  --ui: "Hanken Grotesk", ui-sans-serif, sans-serif;
+  --voice: "Newsreader", "Iowan Old Style", Georgia, serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: oklch(17.5% 0.01 60);
+    --paper-2: oklch(21.5% 0.012 62);
+    --ink: oklch(93% 0.012 75);
+    --ink-2: oklch(78% 0.016 72);
+    --ink-3: oklch(62% 0.02 68);
+    --line: oklch(29% 0.014 62);
+    --tan-wash: oklch(30% 0.035 65);
+    --ember: oklch(72% 0.13 55);
+    --stage: oklch(11% 0.008 60);
+    --shadow: 0 1px 1px oklch(0% 0 0 / 0.3), 0 10px 30px -12px oklch(0% 0 0 / 0.6);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 15px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; border-radius: 6px; }
+.num, time { font-variant-numeric: tabular-nums; }
+
+.bar {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  min-height: 60px; padding: 10px clamp(16px, 3vw, 40px); background: var(--paper); box-shadow: 0 1px 0 var(--line);
+}
+.brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -0.01em; }
+.brand svg { width: 22px; height: 17px; color: var(--ember); }
+.count { color: var(--ink-3); }
+.filters { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--paper-2); margin-left: auto; }
+.filters button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 13.5px; font-weight: 550; color: var(--ink-3); transition: background-color .15s ease, color .15s ease; }
+.filters button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px oklch(30% 0.03 60 / 0.12); }
+.search { width: min(260px, 100%); height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--paper-2); outline-offset: 0; }
+.search::placeholder { color: var(--ink-3); }
+
+main { max-width: 1180px; margin: 0 auto; padding: clamp(24px, 3vw, 44px) clamp(16px, 3vw, 40px) 90px; }
+
+/* The newest capture, larger */
+.latest { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: clamp(22px, 3vw, 44px); align-items: center; margin-bottom: clamp(40px, 5vw, 64px); }
+.latest .thumb { border-radius: 14px; box-shadow: var(--shadow); aspect-ratio: 16 / 10; }
+.eyebrow { margin: 0 0 8px; font-size: 12px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--ember); }
+.latest h1 { margin: 0; font-size: clamp(26px, 2.6vw, 36px); line-height: 1.1; font-weight: 650; letter-spacing: -0.02em; }
+.latest .said { margin: 16px 0 0; font: italic 400 clamp(19px, 1.8vw, 23px)/1.4 var(--voice); color: var(--ink-2); text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.latest .meta { margin-top: 16px; }
+.open { display: inline-flex; align-items: center; gap: 6px; margin-top: 22px; height: 38px; padding: 0 16px; border-radius: 10px; background: var(--ink); color: var(--paper); font-weight: 600; font-size: 14px; transition: background-color .15s ease; }
+.open:hover { background: var(--ink-2); }
+
+.thumb { position: relative; display: block; overflow: hidden; background: var(--stage); }
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform .35s cubic-bezier(.22, 1, .36, 1); }
+a:hover .thumb img { transform: scale(1.025); }
+.badge { position: absolute; left: 8px; bottom: 8px; padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600; color: oklch(96% 0.01 75); background: oklch(17% 0.01 60 / 0.78); font-variant-numeric: tabular-nums; }
+.empty-thumb { display: grid; place-items: center; height: 100%; color: oklch(60% 0.02 66); font-size: 13px; }
+
+.day { margin-bottom: 36px; }
+.day h2 { position: sticky; top: 60px; z-index: 1; margin: 0; padding: 10px 0; background: var(--paper); font-size: 13px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: grid; grid-template-columns: 184px minmax(0, 1fr); gap: 20px; align-items: center; padding: 14px 10px; margin: 0 -10px; border-radius: 12px; transition: background-color .15s ease; }
+.row:hover { background: var(--paper-2); }
+.row + .row { box-shadow: 0 -1px 0 var(--line); }
+.row:hover, .row:hover + .row { box-shadow: none; }
+.row .thumb { border-radius: 8px; aspect-ratio: 16 / 10; box-shadow: 0 0 0 1px var(--line); }
+.row-top { margin: 0; font-size: 13.5px; color: var(--ink-3); }
+.row-top b { font-weight: 650; color: var(--ink); margin-right: 8px; }
+.rows li { position: relative; }
+.rows li.done .row { opacity: .5; }
+.mark { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; font-size: 12.5px; font-weight: 550; color: var(--ink-3); cursor: pointer; opacity: 0; transition: opacity .15s ease, background-color .15s ease; }
+.rows li:hover .mark, .mark[aria-pressed="true"] { opacity: 1; }
+.mark:hover { background: var(--paper); }
+.mark[aria-pressed="true"] { color: var(--ember); }
+.row-title { margin: 3px 0 0; font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; text-wrap: pretty; }
+.row-said { margin: 4px 0 0; font: italic 400 17px/1.4 var(--voice); color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
+.row-said.quiet { font: 400 14px/1.4 var(--ui); color: var(--ink-3); }
+.meta { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
+.meta span + span::before { content: "·"; margin: 0 7px; color: var(--line); }
+
+.none { max-width: 520px; margin: 12vh auto 0; text-align: left; }
+.none h1 { margin: 0 0 10px; font-size: 28px; letter-spacing: -0.02em; }
+.none p { margin: 0 0 8px; color: var(--ink-2); }
+kbd { font: 600 12px/1 var(--ui); padding: 3px 6px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 var(--line); }
+
+@media (max-width: 760px) {
+  .latest { grid-template-columns: 1fr; }
+  .row { grid-template-columns: 112px minmax(0, 1fr); gap: 14px; }
+  .filters { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <span class="brand">
+    <svg viewBox="-0.6 -0.6 25.2 19" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.8V1h5.5M16.5 1H22v3.8M22 9.2V13h-5.5M7.5 13H2V9.2"/></g><path d="M3.2 13 1.4 17.6 8.2 13z" fill="currentColor"/><circle cx="12" cy="7" r="2.7" fill="currentColor"/></svg>
+    Pointer
+  </span>
+  <span class="count" id="count"></span>
+  <div class="filters" role="group" aria-label="Show">
+    <button type="button" data-kind="" aria-pressed="true">All</button>
+    <button type="button" data-kind="video" aria-pressed="false">Videos</button>
+    <button type="button" data-kind="todo" aria-pressed="false">To review</button>
+    <button type="button" data-kind="watch" aria-pressed="false">Watch</button>
+    <button type="button" data-kind="document" aria-pressed="false">Documents</button>
+    <button type="button" data-kind="screenshot" aria-pressed="false">Screenshots</button>
+  </div>
+  <input class="search" id="search" type="search" placeholder="Search titles and talk…" aria-label="Search titles and talk">
+</header>
+<main id="main"></main>
+
+<script id="data" type="application/json">__LIBRARY_JSON__</script>
+<script>
+(() => {
+  const sessions = JSON.parse(document.getElementById("data").textContent)
+    .sort((a, b) => new Date(b.created) - new Date(a.created));
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const kinds = { video: "Video", document: "Document", screenshot: "Screenshot", watch: "Watch" };
+  const main = document.getElementById("main");
+  // A capture still being written up: reload until its finished entry replaces the placeholder.
+  if (sessions.some((s) => s.processing)) setTimeout(() => location.reload(), 10000);
+  let filter = "", query = "";
+  const seenKey = "pointer.reviewed";
+  const reviewed = () => { try { return JSON.parse(localStorage.getItem(seenKey) || "{}"); } catch { return {}; } };
+  const setReviewed = (href, value) => {
+    const all = reviewed();
+    value ? (all[href] = true) : delete all[href];
+    try { localStorage.setItem(seenKey, JSON.stringify(all)); } catch {}
+  };
+
+  const dayLabel = (d) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  };
+  const timeOf = (d) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const length = (s) => { if (!s.seconds) return null; const t = Math.round(s.seconds); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+  const metaBits = (s) => s.processing ? ["Writing up the session. This page refreshes by itself."] : [
+    s.kind !== "screenshot" && `${s.frames} ${s.kind === "document" ? (s.frames === 1 ? "page" : "pages") : (s.frames === 1 ? "frame" : "frames")}`,
+    s.clicks && `${s.clicks} ${s.clicks === 1 ? "click" : "clicks"}`,
+    s.target && `sent to ${s.target}`,
+  ].filter(Boolean);
+  const thumb = (s) => {
+    const t = el("span", "thumb");
+    if (s.thumb) t.append(Object.assign(el("img"), { src: s.thumb, alt: "", loading: "lazy" }));
+    else t.append(el("span", "empty-thumb", s.processing ? "Processing…" : "No image"));
+    const len = length(s);
+    if (len) t.append(el("span", "badge", len));
+    return t;
+  };
+  const meta = (s) => { const m = el("p", "meta"); metaBits(s).forEach((b) => m.append(el("span", null, b))); return m; };
+
+  function render() {
+    const done = reviewed();
+    const matchesText = (s) => !query || `${s.title || ""} ${s.said || ""}`.toLowerCase().includes(query);
+    const shown = sessions.filter((s) => (!filter || (filter === "todo" ? !done[s.href] : s.kind === filter)) && matchesText(s));
+    document.getElementById("count").textContent = `${sessions.length} ${sessions.length === 1 ? "capture" : "captures"}`;
+    main.replaceChildren();
+
+    if (!sessions.length) {
+      const none = el("section", "none");
+      none.append(el("h1", null, "No captures yet"));
+      const p1 = el("p"); p1.append(Object.assign(el("kbd", null, "⌃⌥C")), " takes a screenshot while you talk.");
+      const p2 = el("p"); p2.append(Object.assign(el("kbd", null, "⌃⌥V")), " records your screen, ", Object.assign(el("kbd", null, "⌃⌥D")), " reads a document as you scroll.");
+      none.append(p1, p2, el("p", null, "Each capture gets a page here with its frames, what you said, and the video."));
+      main.append(none);
+      return;
+    }
+    if (!shown.length) {
+      const none = el("section", "none");
+      none.append(el("h1", null, filter === "todo" ? "All caught up" : "Nothing matches"),
+                  el("p", null, query ? `No capture mentions "${query}".` : filter === "todo" ? "Every capture is marked reviewed." : "No captures of this type yet."));
+      main.append(none);
+      return;
+    }
+
+    const [first, ...rest] = shown;
+    const latest = el("a", "latest");
+    latest.href = first.href;
+    const created = new Date(first.created);
+    const text = el("div");
+    text.append(el("p", "eyebrow", `Latest · ${kinds[first.kind]} · ${dayLabel(created)}, ${timeOf(created)}`),
+                el("h1", null, first.title || `${dayLabel(created)}, ${timeOf(created)}`));
+    if (first.said) text.append(el("p", "said", first.said));
+    text.append(meta(first), el("span", "open", "Open"));
+    latest.append(thumb(first), text);
+    main.append(latest);
+
+    let section = null, current = "";
+    rest.forEach((s) => {
+      const d = new Date(s.created);
+      const label = dayLabel(d);
+      if (label !== current) {
+        current = label;
+        section = el("section", "day");
+        section.append(el("h2", null, label), el("ol", "rows"));
+        main.append(section);
+      }
+      const row = el("a", "row");
+      row.href = s.href;
+      const body = el("div");
+      const top = el("p", "row-top");
+      top.append(el("b", "num", timeOf(d)), kinds[s.kind]);
+      body.append(top, el("p", "row-title", s.title || "Untitled capture"));
+      if (s.said) body.append(el("p", "row-said", s.said));
+      body.append(meta(s));
+      row.append(thumb(s), body);
+      const li = el("li");
+      const mark = el("button", "mark");
+      mark.type = "button";
+      const paint = () => {
+        const isDone = !!reviewed()[s.href];
+        li.classList.toggle("done", isDone);
+        mark.textContent = isDone ? "Reviewed" : "Mark reviewed";
+        mark.setAttribute("aria-pressed", String(isDone));
+      };
+      mark.addEventListener("click", (e) => { e.preventDefault(); setReviewed(s.href, !reviewed()[s.href]); paint(); });
+      paint();
+      li.append(row, mark);
+      section.querySelector(".rows").append(li);
+    });
+  }
+
+  document.querySelectorAll(".filters button").forEach((b) => b.addEventListener("click", () => {
+    filter = b.dataset.kind;
+    document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  }));
+  document.getElementById("search").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); render(); });
+  render();
+})();
+</script>
+</body>
+</html>
