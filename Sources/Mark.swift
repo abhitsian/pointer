@@ -1,32 +1,27 @@
 import AppKit
 
-/// Pointer's mark: the four corners of a screen selection ("show") with a speech-bubble tail ("tell") and a dot
-/// in the middle. Drawn in a 24×18 unit box with y pointing up. Fill each part on its own so overlaps stay solid.
+/// Pointer's mark: an arrow cursor with a speech bubble coming off it (point and tell), the bubble's three dots
+/// cut out. Drawn in a 24×18 unit box with y pointing up. Fill each part on its own so overlaps stay solid.
 enum Mark {
     static func parts(in rect: CGRect) -> [CGPath] {
         let t = transform(for: rect)
-        let frame = CGRect(x: 2, y: 5, width: 20, height: 12)
-        let arm: CGFloat = 5.5  // horizontal arms
-        let rise: CGFloat = 3.8 // vertical arms, short enough that top and bottom corners never meet
+        let u: CGFloat = 0.74
+        let tip = CGPoint(x: 1.2, y: 16.2)
+        let arrow = CGMutablePath()
+        arrow.addLines(between: [(0, 0), (0, 16.5), (4, 12.8), (6.8, 19.3), (9.6, 18.1), (6.9, 11.8), (12.2, 11.8)]
+            .map { CGPoint(x: tip.x + $0.0 * u, y: tip.y - $0.1 * u) }, transform: t)
+        arrow.closeSubpath()
 
-        let corners = CGMutablePath()
-        corners.addLines(between: [CGPoint(x: frame.minX, y: frame.maxY - rise), CGPoint(x: frame.minX, y: frame.maxY),
-                                   CGPoint(x: frame.minX + arm, y: frame.maxY)])
-        corners.addLines(between: [CGPoint(x: frame.maxX - arm, y: frame.maxY), CGPoint(x: frame.maxX, y: frame.maxY),
-                                   CGPoint(x: frame.maxX, y: frame.maxY - rise)])
-        corners.addLines(between: [CGPoint(x: frame.maxX, y: frame.minY + rise), CGPoint(x: frame.maxX, y: frame.minY),
-                                   CGPoint(x: frame.maxX - arm, y: frame.minY)])
-        corners.addLines(between: [CGPoint(x: frame.minX + arm, y: frame.minY), CGPoint(x: frame.minX, y: frame.minY),
-                                   CGPoint(x: frame.minX, y: frame.minY + rise)])
-        var stroked = corners.copy(strokingWithWidth: 2.4, lineCap: .round, lineJoin: .round, miterLimit: 10)
-        stroked = stroked.copy(using: [t]) ?? stroked
-
-        let tail = CGMutablePath()
-        tail.addLines(between: [CGPoint(x: 3.2, y: 5), CGPoint(x: 1.4, y: 0.4), CGPoint(x: 8.2, y: 5)], transform: t)
-        tail.closeSubpath()
-
-        let dot = CGPath(ellipseIn: CGRect(x: 9.3, y: 8.3, width: 5.4, height: 5.4), transform: [t])
-        return [stroked, tail, dot]
+        let body = CGRect(x: 11.2, y: 8.6, width: 12.3, height: 8.4)
+        let bubble = CGMutablePath()
+        bubble.addRoundedRect(in: body, cornerWidth: 3.2, cornerHeight: 3.2, transform: t)
+        bubble.addLines(between: [CGPoint(x: 12.6, y: 9.4), CGPoint(x: 10.2, y: 6.4), CGPoint(x: 16.2, y: 9.4)], transform: t)
+        bubble.closeSubpath()
+        let dots = CGMutablePath()
+        for i in 0..<3 {
+            dots.addEllipse(in: CGRect(x: body.midX - 1 + CGFloat(i - 1) * 3, y: body.midY - 1, width: 2, height: 2), transform: t)
+        }
+        return [arrow, bubble.subtracting(dots)]
     }
 
     /// Menu bar glyph. Template image, so macOS tints it for light and dark menu bars.

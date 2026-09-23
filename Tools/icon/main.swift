@@ -1,7 +1,7 @@
 import AppKit
 
-// Pointer app icon: the white mark (selection corners, speech tail, dot) on a warm squircle.
-// Usage: make-icon <output.iconset>
+// Pointer app icon: a cream arrow cursor with a dark speech bubble coming off it (point and tell), amber dots in
+// the bubble, on a warm squircle. Usage: make-icon <output.iconset>
 
 let output = CommandLine.arguments.dropFirst().first ?? "Pointer.iconset"
 try? FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
@@ -24,26 +24,54 @@ func render(_ px: Int) -> Data? {
                               space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
     let s = CGFloat(px)
 
-    let inset = s * 0.05
-    let tile = CGRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
-    let squircle = CGPath(roundedRect: tile, cornerWidth: s * 0.22, cornerHeight: s * 0.22, transform: nil)
+    let inset = s * 0.09
     ctx.saveGState()
-    ctx.addPath(squircle)
+    ctx.addPath(CGPath(roundedRect: CGRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset),
+                       cornerWidth: s * 0.2, cornerHeight: s * 0.2, transform: nil))
     ctx.clip()
-    let warm = CGGradient(colorsSpace: space, colors: [rgb(0.93, 0.72, 0.48), rgb(0.80, 0.45, 0.24)] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(warm, start: CGPoint(x: 0, y: s), end: CGPoint(x: 0, y: 0), options: [])
-    let sheen = CGGradient(colorsSpace: space, colors: [rgb(1, 1, 1, 0.22), rgb(1, 1, 1, 0)] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(sheen, start: CGPoint(x: 0, y: s), end: CGPoint(x: 0, y: s * 0.5), options: [])
+    let warm = CGGradient(colorsSpace: space, colors: [rgb(0.96, 0.62, 0.3), rgb(0.8, 0.36, 0.2)] as CFArray, locations: [0, 1])!
+    ctx.drawLinearGradient(warm, start: CGPoint(x: 0, y: s), end: CGPoint(x: s, y: 0), options: [])
 
-    let box = CGRect(x: s * 0.2, y: s * 0.2, width: s * 0.6, height: s * 0.6)
-    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.01), blur: s * 0.03, color: rgb(0.3, 0.12, 0.02, 0.35))
-    ctx.setFillColor(rgb(1, 0.99, 0.97))
-    ctx.beginTransparencyLayer(auxiliaryInfo: nil) // one shadow for the whole mark
-    for part in Mark.parts(in: box) {
-        ctx.addPath(part)
+    func shadowed(_ draw: () -> Void) {
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.035, color: rgb(0, 0, 0, 0.45))
+        draw()
+        ctx.restoreGState()
+    }
+
+    // The bubble, with its tail pointing back at the cursor.
+    let bubble = CGRect(x: s * 0.44, y: s * 0.5, width: s * 0.36, height: s * 0.24)
+    shadowed {
+        ctx.setFillColor(rgb(0.16, 0.12, 0.1))
+        ctx.addPath(CGPath(roundedRect: bubble, cornerWidth: s * 0.08, cornerHeight: s * 0.08, transform: nil))
+        ctx.fillPath()
+        ctx.move(to: CGPoint(x: bubble.minX + s * 0.05, y: bubble.minY + 1))
+        ctx.addLine(to: CGPoint(x: bubble.minX - s * 0.04, y: bubble.minY - s * 0.06))
+        ctx.addLine(to: CGPoint(x: bubble.minX + s * 0.14, y: bubble.minY + 1))
         ctx.fillPath()
     }
-    ctx.endTransparencyLayer()
+    ctx.setFillColor(rgb(0.97, 0.69, 0.25))
+    for i in 0..<3 {
+        let r = s * 0.027
+        ctx.fillEllipse(in: CGRect(x: bubble.midX - r + CGFloat(i - 1) * s * 0.085, y: bubble.midY - r, width: 2 * r, height: 2 * r))
+    }
+
+    // The cursor: macOS arrow proportions, tip top-left.
+    let tip = CGPoint(x: s * 0.22, y: s * 0.58), u = s * 0.4 / 20
+    let arrow = CGMutablePath()
+    arrow.addLines(between: [(0, 0), (0, 16.5), (4, 12.8), (6.8, 19.3), (9.6, 18.1), (6.9, 11.8), (12.2, 11.8)]
+        .map { CGPoint(x: tip.x + $0.0 * u, y: tip.y - $0.1 * u) })
+    arrow.closeSubpath()
+    shadowed {
+        ctx.setFillColor(rgb(0.98, 0.95, 0.88))
+        ctx.addPath(arrow)
+        ctx.fillPath()
+    }
+    ctx.setStrokeColor(rgb(0.3, 0.14, 0.08))
+    ctx.setLineWidth(max(1, s * 0.012))
+    ctx.setLineJoin(.round)
+    ctx.addPath(arrow)
+    ctx.strokePath()
     ctx.restoreGState()
 
     guard let image = ctx.makeImage() else { return nil }
