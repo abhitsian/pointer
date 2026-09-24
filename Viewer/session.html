@@ -228,7 +228,7 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const clock = (t) => { t = Math.max(0, t || 0); return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`; };
-  const kinds = { video: "Screen recording", document: "Document", screenshot: "Screenshot", watch: "Watch session" };
+  const kinds = { video: "Screen recording", document: "Document", screenshot: "Screenshot", watch: "Watch session", listen: "Listen & ask session" };
   const unit = data.kind === "document" ? ["page", "pages"] : ["frame", "frames"];
   const plural = (n, [one, many]) => `${n} ${n === 1 ? one : many}`;
 

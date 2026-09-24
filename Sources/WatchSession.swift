@@ -37,7 +37,16 @@ final class WatchSession: ActiveCapture {
 
     private var videoURL: URL { folder.appendingPathComponent("recording.mov") }
 
-    init(hud: HUDController, stopLabel: String, capturesFolder: URL, onEnd: @escaping (URL?) -> Void) {
+    /// Listen and ask: while you listen, suggest questions worth asking, and collect them for the write-up.
+    let listen: Bool
+    /// Whether the HUD is free to show a question (nothing else is being captured).
+    var hudFree: () -> Bool = { true }
+    private var questions: [SessionPage.Question] = []
+    private var asking = false
+    private var askedThrough = 0.0
+
+    init(hud: HUDController, stopLabel: String, capturesFolder: URL, listen: Bool = false, onEnd: @escaping (URL?) -> Void) {
+        self.listen = listen
         self.hud = hud
         self.stopLabel = stopLabel
         self.onEnd = onEnd
@@ -45,7 +54,7 @@ final class WatchSession: ActiveCapture {
         mixer = AudioMixer(mic: true, system: meetingAudio)
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        folder = capturesFolder.appendingPathComponent("\(stamp.string(from: Date()))-watch", isDirectory: true)
+        folder = capturesFolder.appendingPathComponent("\(stamp.string(from: Date()))-\(listen ? "listen" : "watch")", isDirectory: true)
     }
 
     func start() {
@@ -83,8 +92,8 @@ final class WatchSession: ActiveCapture {
             }
             self.phase = .watching
             self.started = Date()
-            self.hud.flash("Watching this screen", hint: "\(self.stopLabel) stops · nothing is sent anywhere",
-                           tone: .live, for: 3)
+            self.hud.flash(self.listen ? "Listening · questions will show here" : "Watching this screen",
+                           hint: "\(self.stopLabel) stops · nothing is sent anywhere", tone: .live, for: 3)
             self.noteContext()
             self.clock = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
         }
@@ -114,6 +123,52 @@ final class WatchSession: ActiveCapture {
         let seconds = Int(elapsed)
         onTick?("\(seconds / 60):" + String(format: "%02d", seconds % 60))
         noteContext()
+        if listen, seconds % 30 < 2 { suggestQuestion(at: elapsed) }
+    }
+
+    // MARK: Listen and ask
+
+    /// Every 30 s: if enough new speech has come in, ask Claude for the one question worth asking now.
+    private func suggestQuestion(at elapsed: TimeInterval) {
+        guard !asking else { return }
+        let heard = (you.words + others.words).sorted { $0.start < $1.start }
+        let fresh = heard.filter { $0.start > askedThrough }
+        guard fresh.count >= 40 else { return }
+        asking = true
+        askedThrough = heard.last?.start ?? elapsed
+        let recent = utterances(from: heard.filter { $0.start > elapsed - 240 }, started: started)
+            .map { "[\(WatchSession.clock($0.start))] \($0.speaker ?? "Others"): \($0.text)" }.joined(separator: "\n")
+        let window = context.last.map { $0.window.isEmpty ? $0.app : "\($0.app) · \($0.window)" } ?? ""
+        let before = questions.map { "- \($0.text)" }.joined(separator: "\n")
+        let prompt = """
+        Someone is listening to a talk, meeting or video on their Mac to learn from it. Below are the last few \
+        minutes of what was said (speech recognition, so odd words may be misheard) and the window in front.
+
+        <transcript>
+        \(recent)
+        </transcript>
+        <window>\(window)</window>
+        <already-suggested>
+        \(before)
+        </already-suggested>
+
+        Reply with the single most useful question for them to take away from the latest part: to ask the \
+        presenter or their team afterwards, about something skipped or left unclear, or a claim worth checking. \
+        One sentence, under 20 words, specific to what was just said, not already suggested. If nothing in the \
+        latest part deserves a question, reply NONE. Reply with the question only.
+        """
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let reply = Digest.run(prompt)?.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"")))
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.asking = false
+                guard self.phase == .watching, let reply, !reply.isEmpty, !reply.uppercased().hasPrefix("NONE"),
+                      reply.count < 240 else { return }
+                self.questions.append(SessionPage.Question(time: elapsed, text: reply))
+                Log.write("listen: question \(self.questions.count) at \(WatchSession.clock(elapsed))")
+                if self.hudFree() { self.hud.flash(reply, hint: "Question to ask · \(self.stopLabel) stops", tone: .live, for: 12) }
+            }
+        }
     }
 
     /// The app and window in front, recorded when it changes.
@@ -144,7 +199,7 @@ final class WatchSession: ActiveCapture {
         // Short, so the HUD is free for the next capture. The library shows a Processing card until it's saved.
         hud.flash("Saved · writing it up in the background", hint: "\(Int(seconds / 60)) min watched · you can start another now",
                   tone: .live, for: 3)
-        var placeholder = SessionPage(kind: "watch", created: started, seconds: seconds, narration: "")
+        var placeholder = SessionPage(kind: listen ? "listen" : "watch", created: started, seconds: seconds, narration: "")
         placeholder.title = "Processing…"
         placeholder.processing = true
         let folder = self.folder
@@ -209,15 +264,17 @@ final class WatchSession: ActiveCapture {
             ScreenTranscript.Entry(file: notes[$0].file, time: notes[$0].time, context: notes[$0].context, lines: ScreenTranscript.content(screenText[$0]))
         }, folder: folder)
 
-        var page = SessionPage(kind: "watch", created: started, seconds: seconds, narration: cues.map(\.text).joined(separator: " "),
+        var page = SessionPage(kind: listen ? "listen" : "watch", created: started, seconds: seconds, narration: cues.map(\.text).joined(separator: " "),
                                frames: notes)
         page.video = "recording.mov"
         page.voice = true
         page.cues = cues
         page.summary = nil
         let written = Digest.write(transcript: transcript, screen: screenText, frames: notes,
-                                   context: contextTimeline(started: started), minutes: Int(seconds / 60), into: folder)
+                                   context: contextTimeline(started: started), minutes: Int(seconds / 60),
+                                   questions: listen ? questions : nil, into: folder)
         page.digest = written?.body
+        if listen { page.questions = questions }
         page.title = written?.title ?? notes.compactMap(\.context).mostCommon()
         Viewer.write(page, folder: folder)
         Viewer.rebuildLibrary()

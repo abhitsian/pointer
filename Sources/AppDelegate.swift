@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var videoHotKey: HotKey?
     private var documentHotKey: HotKey?
     private var watchHotKey: HotKey?
+    private var listenHotKey: HotKey?
     private var watching: WatchSession?
     private var session: ActiveCapture?
     /// Stopped watch sessions still being written up. Held here so they finish after the next one starts.
@@ -43,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         askForPermissions()
         Transcriber.warmUp()
         lastRecording = newestRecording()
-        hud.flash("Pointer is ready", hint: "\(shortcut.label) shot   \(shortcut.videoLabel) video   \(shortcut.documentLabel) doc   \(shortcut.watchLabel) watch", tone: .live, for: 2.5)
+        hud.flash("Pointer is ready", hint: "\(shortcut.label) shot   \(shortcut.videoLabel) video   \(shortcut.documentLabel) doc   \(shortcut.watchLabel) watch   \(shortcut.listenLabel) listen", tone: .live, for: 2.5)
     }
 
     /// Opening Pointer again (Finder, Spotlight, `open`) drops its menu down, so you can find the icon.
@@ -71,8 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         watchHotKey = HotKey(keyCode: HotKey.keyW, modifiers: shortcut.modifiers) { [weak self] in
             self?.shortcutPressed(.watch)
         }
+        listenHotKey?.unregister()
+        listenHotKey = HotKey(keyCode: HotKey.keyQ, modifiers: shortcut.modifiers) { [weak self] in
+            self?.shortcutPressed(.listen)
+        }
         let keys = [(hotKey, shortcut.label), (videoHotKey, shortcut.videoLabel), (documentHotKey, shortcut.documentLabel),
-                    (watchHotKey, shortcut.watchLabel)]
+                    (watchHotKey, shortcut.watchLabel), (listenHotKey, shortcut.listenLabel)]
         Log.write("hotkeys: " + keys.map { "\($0.1) registered=\($0.0?.registered == true)" }.joined(separator: " "))
         let taken = keys.filter { $0.0?.registered == false }.map(\.1)
         if !taken.isEmpty {
@@ -80,22 +85,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private enum Kind: String { case screenshot, video, document, watch }
+    private enum Kind: String { case screenshot, video, document, watch, listen }
 
     private func shortcutPressed(_ kind: Kind) {
         Log.write("hotkey: \(kind.rawValue) pressed, capture=\(session != nil) watching=\(watching != nil)")
         if kind == .watch { return watching == nil ? startWatching() : watching?.shortcutPressed() ?? () }
+        if kind == .listen { return watching == nil ? startListening() : watching?.shortcutPressed() ?? () }
         if let session { return session.shortcutPressed() }
         switch kind {
         case .screenshot: startCapture()
         case .video: startVideo()
         case .document: startDocument()
-        case .watch: break
+        case .watch, .listen: break
         }
     }
 
     /// Watch mode: a silent session that records and writes itself up, with nothing pasted anywhere.
-    @objc private func startWatching() {
+    @objc private func startWatching() { beginWatch(listen: false) }
+
+    /// Listen and ask: watch mode that also suggests questions worth asking as you listen.
+    @objc private func startListening() { beginWatch(listen: true) }
+
+    private func beginWatch(listen: Bool) {
         guard watching == nil else { return watching?.shortcutPressed() ?? () }
         guard CGPreflightScreenCaptureAccess() else {
             hud.flash("Pointer needs Screen Recording", hint: "allow it, then relaunch Pointer", for: 5)
@@ -104,7 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         weak var this: WatchSession?
-        let session = WatchSession(hud: hud, stopLabel: shortcut.watchLabel, capturesFolder: folder) { [weak self] page in
+        let session = WatchSession(hud: hud, stopLabel: listen ? shortcut.listenLabel : shortcut.watchLabel, capturesFolder: folder,
+                                   listen: listen) { [weak self] page in
             guard let self else { return }
             if let this, self.watching === this { self.watching = nil }
             self.writingUp.removeAll { $0 === this }
@@ -112,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.refreshWatchTitle()
         }
         this = session
+        session.hudFree = { [weak self] in self?.session == nil }
         session.onTick = { [weak self] elapsed in
             guard let self, self.watching === session else { return }
             self.statusItem.button?.title = elapsed.map { " ● \($0)" } ?? ""
@@ -225,7 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
 
         if watching != nil {
-            let stop = NSMenuItem(title: "Stop watching and write it up", action: #selector(stopWatching), keyEquivalent: "w")
+            let stop = NSMenuItem(title: watching?.listen == true ? "Stop listening and write it up" : "Stop watching and write it up",
+                                  action: #selector(stopWatching), keyEquivalent: watching?.listen == true ? "q" : "w")
             stop.keyEquivalentModifierMask = shortcut.menuModifiers
             stop.target = self
             menu.addItem(stop)
@@ -262,6 +276,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 watch.keyEquivalentModifierMask = shortcut.menuModifiers
                 watch.target = self
                 menu.addItem(watch)
+                let listen = NSMenuItem(title: "Listen and suggest questions", action: #selector(startListening), keyEquivalent: "q")
+                listen.keyEquivalentModifierMask = shortcut.menuModifiers
+                listen.target = self
+                menu.addItem(listen)
             }
         }
         menu.addItem(.separator())

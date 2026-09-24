@@ -7,6 +7,7 @@ final class HotKey {
     static let keyV: UInt32 = 9
     static let keyD: UInt32 = 2
     static let keyW: UInt32 = 13
+    static let keyQ: UInt32 = 12
     static let keySpace: UInt32 = 49
     static let keyReturn: UInt32 = 36
     static let keyEscape: UInt32 = 53
@@ -65,6 +66,7 @@ struct Shortcut: Equatable {
     var videoLabel: String { prefix + "V" }
     var documentLabel: String { prefix + "D" }
     var watchLabel: String { prefix + "W" }
+    var listenLabel: String { prefix + "Q" }
 
     static let presets: [Shortcut] = [
         Shortcut(label: "⌃⌥C", keyCode: HotKey.keyC, modifiers: UInt32(controlKey | optionKey),

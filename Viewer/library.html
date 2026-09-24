@@ -134,7 +134,7 @@ kbd { font: 600 12px/1 var(--ui); padding: 3px 6px; border-radius: 5px; box-shad
   const sessions = JSON.parse(document.getElementById("data").textContent)
     .sort((a, b) => new Date(b.created) - new Date(a.created));
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  const kinds = { video: "Video", document: "Document", screenshot: "Screenshot", watch: "Watch" };
+  const kinds = { video: "Video", document: "Document", screenshot: "Screenshot", watch: "Watch", listen: "Listen & ask" };
   const main = document.getElementById("main");
   // A capture still being written up: reload until its finished entry replaces the placeholder.
   if (sessions.some((s) => s.processing)) setTimeout(() => location.reload(), 10000);
@@ -175,7 +175,7 @@ kbd { font: 600 12px/1 var(--ui); padding: 3px 6px; border-radius: 5px; box-shad
   function render() {
     const done = reviewed();
     const matchesText = (s) => !query || `${s.title || ""} ${s.said || ""}`.toLowerCase().includes(query);
-    const shown = sessions.filter((s) => (!filter || (filter === "todo" ? !done[s.href] : s.kind === filter)) && matchesText(s));
+    const shown = sessions.filter((s) => (!filter || (filter === "todo" ? !done[s.href] : filter === "watch" ? ["watch", "listen"].includes(s.kind) : s.kind === filter)) && matchesText(s));
     document.getElementById("count").textContent = `${sessions.length} ${sessions.length === 1 ? "capture" : "captures"}`;
     main.replaceChildren();
 

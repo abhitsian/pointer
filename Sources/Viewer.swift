@@ -26,7 +26,7 @@ struct SessionPage: Codable {
         var app: String
     }
 
-    var kind: String // "video", "document", "screenshot" or "watch"
+    var kind: String // "video", "document", "screenshot", "watch" or "listen"
     /// A short label for the library, written by the session or taken from what was captured.
     var title: String?
     var created: Date
@@ -43,6 +43,12 @@ struct SessionPage: Codable {
     var summary: String?
     /// Watch sessions: the write-up in Markdown.
     var digest: String?
+    /// Listen-and-ask sessions: the questions suggested live, at their time in the session.
+    struct Question: Codable {
+        var time: Double
+        var text: String
+    }
+    var questions: [Question]?
     /// True while the capture is still being written up, so the library can show it straight away.
     var processing: Bool?
 }

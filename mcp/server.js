@@ -196,7 +196,7 @@ function list(a) {
 const FILTERS = {
   days: { type: "number", description: "Only captures from the last N days." },
   since: { type: "string", description: "Only captures on or after this ISO date." },
-  kind: { type: "string", enum: ["meeting", "watch", "video", "document", "screenshot"], description: "meeting = Cuecard meeting notes; the rest are Pointer captures." },
+  kind: { type: "string", enum: ["meeting", "watch", "listen", "video", "document", "screenshot"], description: "meeting = Cuecard meeting notes; listen = Pointer listen-and-ask sessions (write-up includes questions to ask); the rest are Pointer captures." },
   limit: { type: "number" },
 };
 const TOOLS = [
