@@ -278,6 +278,7 @@ final class WatchSession: ActiveCapture {
         page.title = written?.title ?? notes.compactMap(\.context).mostCommon()
         Viewer.write(page, folder: folder)
         Viewer.rebuildLibrary()
+        AfterWriteUp.run(folder.path)
         Log.write("watch: \(notes.count) frames, \(cues.count) lines, digest=\(page.digest != nil)")
 
         DispatchQueue.main.async {

@@ -164,6 +164,10 @@ The idea comes from Capi (trycapi.com), an unreleased product. Pointer is a pers
 
 **⌃⌥Q** starts a watch session for when you're listening to learn: a recorded talk, a webinar, a meeting you're sitting in on. It records like watch mode (⌃⌥W), and every 30 seconds, once enough new speech has come in, asks Claude for the one question worth taking away from what was just said. The question shows in the HUD for 12 seconds (unless another capture is using it). The write-up adds "Questions that came up" and "To look up", each with timestamps. Press ⌃⌥Q again to stop; the write-up finishes in the background.
 
+## After the write-up
+
+`defaults write com.vaibhav.pointer afterWriteUp "/path/to/script"` runs that command with the session folder once a watch or listen write-up is saved.
+
 ## Screen text and the MCP server
 
 Each watch and video capture writes `screen.txt`: every line OCR'd off each key frame (minus the macOS menu bar), under a `## [m:ss] frame-N.png · app` header. `Pointer --screen-text-backfill` writes it for older captures.
