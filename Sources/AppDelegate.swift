@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var watchHotKey: HotKey?
     private var watching: WatchSession?
     private var session: ActiveCapture?
+    /// Stopped watch sessions still being written up. Held here so they finish after the next one starts.
+    private var writingUp: [WatchSession] = []
     private var lastCapture: CaptureRecord?
     private var lastRecording: URL?
     private var lastWatchPage: URL?
@@ -101,16 +103,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             openSettings("Privacy_ScreenCapture")
             return
         }
+        weak var this: WatchSession?
         let session = WatchSession(hud: hud, stopLabel: shortcut.watchLabel, capturesFolder: folder) { [weak self] page in
-            self?.watching = nil
-            self?.statusItem.button?.title = ""
-            if let page { self?.lastWatchPage = page }
+            guard let self else { return }
+            if let this, self.watching === this { self.watching = nil }
+            self.writingUp.removeAll { $0 === this }
+            if let page { self.lastWatchPage = page }
+            self.refreshWatchTitle()
         }
+        this = session
         session.onTick = { [weak self] elapsed in
-            self?.statusItem.button?.title = elapsed.map { " ● \($0)" } ?? ""
+            guard let self, self.watching === session else { return }
+            self.statusItem.button?.title = elapsed.map { " ● \($0)" } ?? ""
+        }
+        // Stopping frees the shortcut at once; the write-up carries on in the background.
+        session.onStopped = { [weak self] in
+            guard let self, self.watching === session else { return }
+            self.watching = nil
+            self.writingUp.append(session)
+            self.refreshWatchTitle()
         }
         watching = session
         session.start()
+    }
+
+    /// The menu bar title: the running watch's clock, else how many sessions are still being written up.
+    private func refreshWatchTitle() {
+        guard watching == nil else { return }
+        statusItem.button?.title = writingUp.isEmpty ? "" : " Writing up\(writingUp.count > 1 ? " \(writingUp.count)" : "")"
     }
 
     @objc private func stopWatching() {

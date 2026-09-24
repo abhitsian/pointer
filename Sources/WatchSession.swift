@@ -17,6 +17,9 @@ final class WatchSession: ActiveCapture {
     private let onEnd: (URL?) -> Void
     /// Reports the elapsed time so the menu bar can show it.
     var onTick: ((String?) -> Void)?
+    /// Recording has stopped and the write-up has started. The app can start another session from here; this one
+    /// finishes in the background and calls `onEnd` when its page is saved.
+    var onStopped: (() -> Void)?
 
     private let recorder = ScreenRecorder()
     /// One recognizer per side, so every word knows who said it.
@@ -138,9 +141,9 @@ final class WatchSession: ActiveCapture {
         onTick?(nil)
         let started = self.started
         let seconds = Date().timeIntervalSince(started)
-        // Stays up until the write-up is saved, so a long session never looks lost.
-        hud.flash("Processing the session…", hint: "\(Int(seconds / 60)) min watched · it will appear in the library", tone: .live,
-                  for: 600)
+        // Short, so the HUD is free for the next capture. The library shows a Processing card until it's saved.
+        hud.flash("Saved · writing it up in the background", hint: "\(Int(seconds / 60)) min watched · you can start another now",
+                  tone: .live, for: 3)
         var placeholder = SessionPage(kind: "watch", created: started, seconds: seconds, narration: "")
         placeholder.title = "Processing…"
         placeholder.processing = true
@@ -158,6 +161,7 @@ final class WatchSession: ActiveCapture {
                 self.process(words: transcript, started: started, seconds: seconds)
             }
         }
+        onStopped?()
         recorder.stop { _ in saved = true; proceed() }
         var heard: [[SpeechStream.Word]] = []
         let streams = meetingAudio ? [you, others] : [you]
@@ -220,7 +224,6 @@ final class WatchSession: ActiveCapture {
         Log.write("watch: \(notes.count) frames, \(cues.count) lines, digest=\(page.digest != nil)")
 
         DispatchQueue.main.async {
-            self.hud.flash("Session saved", hint: page.title ?? "", tone: .done, for: 3)
             self.phase = .over
             self.notify(digest: page.digest, title: page.title, minutes: Int(seconds / 60), frames: notes.count,
                         first: notes.first?.file)
