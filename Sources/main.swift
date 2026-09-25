@@ -36,8 +36,17 @@ if let flag = arguments.firstIndex(of: "--transcribe"), flag + 1 < arguments.cou
         let file = try AVAudioFile(forReading: URL(fileURLWithPath: arguments[flag + 1]))
         let frame = AVAudioFrameCount(file.processingFormat.sampleRate / 50)
         var position = 0.0
+        // --restart-at <sec> swaps in a fresh analyzer partway through, as the stall check would.
+        let restartAt = arguments.firstIndex(of: "--restart-at").flatMap { Double(arguments[$0 + 1]) }
+        var restarted = false
         while let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frame),
               (try? file.read(into: buffer, frameCount: frame)) != nil, buffer.frameLength > 0 {
+            if let restartAt, !restarted, position >= restartAt {
+                restarted = true
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await analyzer.restart()
+                print("[restarted at \(position)s]")
+            }
             analyzer.append(buffer, at: position)
             position += Double(buffer.frameLength) / file.processingFormat.sampleRate
         }

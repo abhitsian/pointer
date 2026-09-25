@@ -21,7 +21,16 @@ final class WatchSession: ActiveCapture {
     /// finishes in the background and calls `onEnd` when its page is saved.
     var onStopped: (() -> Void)?
 
-    private let recorder = ScreenRecorder()
+    private var recorder = ScreenRecorder()
+    /// The recording, in pieces when macOS ends the capture mid-session and it is restarted: each file and
+    /// where it starts in the session, in seconds.
+    private var segments: [(url: URL, offset: Double)] = []
+    private var screenRect = CGRect.zero
+    /// The stall check: what each stream had received at the last look, and when anything was last restarted.
+    private var lastCheck = Date()
+    private var lastHealthLog = Date()
+    private var seenBuffers: [String: Int] = [:]
+    private var lastRestart: [String: Date] = [:]
     /// One recognizer per side, so every word knows who said it.
     private let you = SpeechStream(speaker: "You")
     private let others = SpeechStream(speaker: "Others")
@@ -79,9 +88,10 @@ final class WatchSession: ActiveCapture {
             onEnd(nil)
             return
         }
-        var options = ScreenRecorder.Options(voice: true, systemAudio: meetingAudio, framesPerSecond: 1, scale: 1)
-        options.onAudio = { [weak self] sample, isMic in self?.mixer.add(sample, mic: isMic) }
-        recorder.start(rect: screen.frame, to: videoURL, options: options) { [weak self] error in
+        screenRect = screen.frame
+        segments = [(videoURL, 0)]
+        recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
+        recorder.start(rect: screen.frame, to: videoURL, options: recordingOptions) { [weak self] error in
             guard let self, self.phase == .starting else { return }
             if let error {
                 Log.write("watch: recorder failed \(error)")
@@ -96,6 +106,68 @@ final class WatchSession: ActiveCapture {
                            hint: "\(self.stopLabel) stops · nothing is sent anywhere", tone: .live, for: 3)
             self.noteContext()
             self.clock = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
+        }
+    }
+
+    private var recordingOptions: ScreenRecorder.Options {
+        var options = ScreenRecorder.Options(voice: true, systemAudio: meetingAudio, framesPerSecond: 1, scale: 1)
+        options.onAudio = { [weak self] sample, isMic in self?.mixer.add(sample, mic: isMic) }
+        return options
+    }
+
+    /// macOS ended the capture (or it stopped delivering audio). Keep going: start a new recording file, so the
+    /// session runs until the user stops it.
+    private func recordingInterrupted(_ error: Error?) {
+        guard phase == .watching else { return }
+        lastRestart["recorder"] = Date()
+        let offset = Date().timeIntervalSince(started)
+        let url = folder.appendingPathComponent("recording-\(segments.count + 1).mov")
+        Log.write("watch: capture ended at \(WatchSession.clock(offset)) (\(error.map { "\($0)" } ?? "no audio")); restarting into \(url.lastPathComponent)")
+        let previous = recorder
+        previous.onInterrupted = nil
+        previous.stop { _ in }
+        recorder = ScreenRecorder()
+        recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
+        recorder.start(rect: screenRect, to: url, options: recordingOptions) { [weak self] error in
+            guard let self else { return }
+            if let error {
+                Log.write("watch: restart failed \(error); trying again in 10 s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) { self.recordingInterrupted(error) }
+                return
+            }
+            self.segments.append((url, Date().timeIntervalSince(self.started)))
+            self.hud.flash("Recording restarted", hint: "macOS stopped the capture; still \(self.listen ? "listening" : "watching")",
+                           tone: .live, for: 3)
+        }
+    }
+
+    /// Every 20 s: a stream getting no audio means the capture died, so restart it; a stream hearing sound but
+    /// returning no text for 45 s has a stalled recognizer, so restart that. Health goes to the log every minute.
+    private func checkHealth() {
+        let now = Date()
+        guard phase == .watching, now.timeIntervalSince(lastCheck) >= 20 else { return }
+        lastCheck = now
+        var report: [String] = []
+        var noAudio = false
+        for stream in meetingAudio ? [you, others] : [you] {
+            let before = seenBuffers[stream.speaker] ?? 0
+            let fresh = stream.received - before
+            seenBuffers[stream.speaker] = stream.received
+            report.append("\(stream.speaker) frames+\(fresh) results \(stream.results) loud \(Int(now.timeIntervalSince(stream.lastLoud)))s ago text \(Int(now.timeIntervalSince(stream.lastResult)))s ago")
+            if fresh == 0, before > 0 { noAudio = true }
+            if now.timeIntervalSince(stream.lastLoud) < 15, now.timeIntervalSince(stream.lastResult) > 45,
+               now.timeIntervalSince(lastRestart[stream.speaker] ?? .distantPast) > 60 {
+                lastRestart[stream.speaker] = now
+                Log.write("health \(stream.speaker): sound but no text for \(Int(now.timeIntervalSince(stream.lastResult)))s, restarting speech")
+                Task { await stream.restart() }
+            }
+        }
+        if noAudio, now.timeIntervalSince(lastRestart["recorder"] ?? .distantPast) > 60 {
+            recordingInterrupted(nil)
+        }
+        if now.timeIntervalSince(lastHealthLog) >= 60 {
+            lastHealthLog = now
+            Log.write("health: " + report.joined(separator: " | "))
         }
     }
 
@@ -123,6 +195,7 @@ final class WatchSession: ActiveCapture {
         let seconds = Int(elapsed)
         onTick?("\(seconds / 60):" + String(format: "%02d", seconds % 60))
         noteContext()
+        checkHealth()
         if listen, seconds % 30 < 2 { suggestQuestion(at: elapsed) }
     }
 
@@ -231,8 +304,7 @@ final class WatchSession: ActiveCapture {
     // MARK: Writing it up
 
     private func process(words: [SpeechStream.Word], started: Date, seconds: Double) {
-        let frames = KeyFrames.extract(from: videoURL, into: folder, maxFrames: WatchSession.frameLimit(seconds),
-                                       sampleEvery: 2)
+        let frames = extractFrames(seconds: seconds)
         var screenText = [[ScreenText.Line]](repeating: [], count: frames.count)
         let lock = NSLock()
         DispatchQueue.concurrentPerform(iterations: frames.count) { i in
@@ -287,6 +359,24 @@ final class WatchSession: ActiveCapture {
                         first: notes.first?.file)
             self.onEnd(self.folder.appendingPathComponent("index.html"))
         }
+    }
+
+    /// Key frames from every piece of the recording, numbered in order and placed on the session's timeline.
+    private func extractFrames(seconds: Double) -> [KeyFrames.Frame] {
+        let limit = WatchSession.frameLimit(seconds)
+        var frames = KeyFrames.extract(from: videoURL, into: folder, maxFrames: limit, sampleEvery: 2)
+        for (i, segment) in segments.enumerated().dropFirst() {
+            let scratch = folder.appendingPathComponent("segment-\(i + 1)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+            for frame in KeyFrames.extract(from: segment.url, into: scratch, maxFrames: limit, sampleEvery: 2) {
+                let target = folder.appendingPathComponent("frame-\(frames.count + 1).png")
+                try? FileManager.default.removeItem(at: target)
+                try? FileManager.default.moveItem(at: frame.url, to: target)
+                frames.append(KeyFrames.Frame(time: frame.time + segment.offset, url: target))
+            }
+            try? FileManager.default.removeItem(at: scratch)
+        }
+        return frames
     }
 
     /// Words grouped into lines: same speaker, less than 1.5 s apart.

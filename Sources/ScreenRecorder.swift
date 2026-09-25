@@ -4,7 +4,7 @@ import ScreenCaptureKit
 
 /// Records part of a display, or one window, to a .mov with ScreenCaptureKit. Pointer's own windows are
 /// left out, and the microphone can be recorded into the file.
-final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput {
+final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput, SCStreamDelegate {
     enum RecorderError: Error {
         case noDisplay
         case noWindow
@@ -31,6 +31,10 @@ final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput 
     private var output: SCRecordingOutput?
     private var onFinish: ((Error?) -> Void)?
     private var url: URL?
+    /// macOS ended the capture while it was meant to be running (display change, lock, another capture app).
+    /// Called on the main queue; the owner decides whether to start again.
+    var onInterrupted: ((Error) -> Void)?
+    private var stopping = false
 
     /// Records `rect` (global Cocoa coordinates, on one screen). `started` runs on the main queue.
     func start(rect: CGRect, to url: URL, voice: Bool, started: @escaping (Error?) -> Void) {
@@ -99,7 +103,7 @@ final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput 
                 recording.outputFileType = .mov
                 recording.videoCodecType = .h264
 
-                let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+                let stream = SCStream(filter: filter, configuration: config, delegate: self)
                 let output = SCRecordingOutput(configuration: recording, delegate: self)
                 try stream.addRecordingOutput(output)
                 if options.onAudio != nil {
@@ -120,6 +124,7 @@ final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput 
 
     /// Stops and waits for the file to be written. `finished` runs on the main queue.
     func stop(_ finished: @escaping (Error?) -> Void) {
+        stopping = true
         guard let stream else { finished(nil); return }
         self.stream = nil
         onFinish = finished
@@ -172,7 +177,20 @@ final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput 
 
     func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
         Log.write("recorder: failed \(error)")
-        DispatchQueue.main.async { self.finish(error) }
+        DispatchQueue.main.async { self.interrupted(error) }
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Log.write("recorder: stream stopped \(error)")
+        DispatchQueue.main.async { self.interrupted(error) }
+    }
+
+    private func interrupted(_ error: Error) {
+        if !stopping, let onInterrupted {
+            self.stream = nil
+            onInterrupted(error)
+        }
+        finish(error)
     }
 
     private func finish(_ error: Error?) {

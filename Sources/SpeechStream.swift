@@ -39,6 +39,14 @@ final class SpeechStream {
         }
     }
 
+    /// For the stall check.
+    var results: Int { analyzer.results }
+    var lastResult: Date { analyzer.lastResult }
+    var lastLoud: Date { analyzer.lastLoud }
+
+    /// Swaps in a fresh recognizer, keeping what was heard.
+    func restart() async { await analyzer.restart() }
+
     var words: [Word] {
         analyzer.words.map { Word(text: $0.text, start: $0.start, duration: $0.duration, speaker: speaker) }
     }

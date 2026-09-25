@@ -22,6 +22,10 @@ final class Analyzer {
     private var volatileWords: [Word] = []
     private(set) var results = 0
     private(set) var lastError = ""
+    /// For the stall check: when text last came back, and when the audio last had sound in it.
+    private(set) var lastResult = Date()
+    private(set) var lastLoud = Date.distantPast
+    private(set) var buffers = 0
 
     private var analyzer: SpeechAnalyzer?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
@@ -79,6 +83,7 @@ final class Analyzer {
 
     /// Starts the analyzer. Audio appended before this finishes is dropped, so await it before opening a mic.
     func start() async throws {
+        lastResult = Date()
         let locale = await Analyzer.locale()
         let transcriber = Analyzer.module(locale)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
@@ -105,6 +110,8 @@ final class Analyzer {
     /// Call from one audio thread. Converts synchronously, since the buffer may not outlive the call.
     /// `at` places the buffer on the capture's timeline; nil means it follows straight on from the last one.
     func append(_ buffer: AVAudioPCMBuffer, at seconds: Double? = nil) {
+        buffers += 1
+        if Analyzer.peak(buffer) > 0.02 { lastLoud = Date() }
         feedLock.lock(); defer { feedLock.unlock() }
         guard let format, let continuation else { dropped += 1; return }
         if inputFormat != buffer.format {
@@ -157,6 +164,36 @@ final class Analyzer {
         }
     }
 
+    /// Replaces a stalled analyzer with a fresh one. Words heard so far are kept, and audio stays on the same
+    /// timeline, so timestamps carry on from where they were.
+    func restart() async {
+        let old = feedLock.withLock {
+            defer { continuation = nil; format = nil; converter = nil; inputFormat = nil }
+            return continuation
+        }
+        old?.finish()
+        resultsTask?.cancel()
+        let stale = analyzer
+        analyzer = nil
+        lock.withLock {
+            finalText = Analyzer.join(finalText, volatileText)
+            finalWords += volatileWords
+            volatileText = ""
+            volatileWords = []
+        }
+        Task { await stale?.cancelAndFinishNow() }
+        do { try await start() } catch { lock.withLock { lastError = "restart: \(error)" } }
+    }
+
+    static func peak(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData else { return 1 } // integer audio: treat as sound present
+        var top: Float = 0
+        for c in 0..<Int(buffer.format.channelCount) {
+            for i in stride(from: 0, to: Int(buffer.frameLength), by: 4) { top = max(top, abs(data[c][i])) }
+        }
+        return top
+    }
+
     func cancel() {
         feedLock.lock()
         continuation?.finish()
@@ -181,6 +218,7 @@ final class Analyzer {
         }
         lock.lock()
         results += 1
+        lastResult = Date()
         if result.isFinal {
             finalText = Analyzer.join(finalText, text)
             finalWords += words
