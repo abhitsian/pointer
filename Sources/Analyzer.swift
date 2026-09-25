@@ -26,6 +26,9 @@ final class Analyzer {
     private(set) var lastResult = Date()
     private(set) var lastLoud = Date.distantPast
     private(set) var buffers = 0
+    /// Buffers loud enough to be speech (peak over 0.1), counted alongside `buffers`, so the stall check can tell
+    /// sustained talking from a click or background noise.
+    private(set) var speechBuffers = 0
 
     private var analyzer: SpeechAnalyzer?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
@@ -111,7 +114,9 @@ final class Analyzer {
     /// `at` places the buffer on the capture's timeline; nil means it follows straight on from the last one.
     func append(_ buffer: AVAudioPCMBuffer, at seconds: Double? = nil) {
         buffers += 1
-        if Analyzer.peak(buffer) > 0.02 { lastLoud = Date() }
+        let peak = Analyzer.peak(buffer)
+        if peak > 0.02 { lastLoud = Date() }
+        if peak > 0.1 { speechBuffers += 1 }
         feedLock.lock(); defer { feedLock.unlock() }
         guard let format, let continuation else { dropped += 1; return }
         if inputFormat != buffer.format {

@@ -30,6 +30,7 @@ final class WatchSession: ActiveCapture {
     private var lastCheck = Date()
     private var lastHealthLog = Date()
     private var seenBuffers: [String: Int] = [:]
+    private var seenSpeech: [String: (buffers: Int, speech: Int)] = [:]
     private var lastRestart: [String: Date] = [:]
     /// One recognizer per side, so every word knows who said it.
     private let you = SpeechStream(speaker: "You")
@@ -155,7 +156,12 @@ final class WatchSession: ActiveCapture {
             seenBuffers[stream.speaker] = stream.received
             report.append("\(stream.speaker) frames+\(fresh) results \(stream.results) loud \(Int(now.timeIntervalSince(stream.lastLoud)))s ago text \(Int(now.timeIntervalSince(stream.lastResult)))s ago")
             if fresh == 0, before > 0 { noAudio = true }
-            if now.timeIntervalSince(stream.lastLoud) < 15, now.timeIntervalSince(stream.lastResult) > 45,
+            // Sustained speech (a quarter of the audio since the last look), not a click or room noise.
+            let was = seenSpeech[stream.speaker] ?? (0, 0)
+            seenSpeech[stream.speaker] = (stream.analyzedBuffers, stream.speechBuffers)
+            let window = stream.analyzedBuffers - was.buffers
+            let talking = window > 0 && Double(stream.speechBuffers - was.speech) / Double(window) >= 0.25
+            if talking, now.timeIntervalSince(stream.lastResult) > 45,
                now.timeIntervalSince(lastRestart[stream.speaker] ?? .distantPast) > 60 {
                 lastRestart[stream.speaker] = now
                 Log.write("health \(stream.speaker): sound but no text for \(Int(now.timeIntervalSince(stream.lastResult)))s, restarting speech")

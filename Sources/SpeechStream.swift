@@ -43,6 +43,8 @@ final class SpeechStream {
     var results: Int { analyzer.results }
     var lastResult: Date { analyzer.lastResult }
     var lastLoud: Date { analyzer.lastLoud }
+    var analyzedBuffers: Int { analyzer.buffers }
+    var speechBuffers: Int { analyzer.speechBuffers }
 
     /// Swaps in a fresh recognizer, keeping what was heard.
     func restart() async { await analyzer.restart() }
