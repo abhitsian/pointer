@@ -66,7 +66,11 @@ final class ScreenRecorder: NSObject, SCRecordingOutputDelegate, SCStreamOutput,
 
     /// Records one window, even where other windows cover it.
     func start(window windowID: CGWindowID, to url: URL, voice: Bool, started: @escaping (Error?) -> Void) {
-        begin(url: url, options: Options(voice: voice), started: started) { content in
+        start(window: windowID, to: url, options: Options(voice: voice), started: started)
+    }
+
+    func start(window windowID: CGWindowID, to url: URL, options: Options, started: @escaping (Error?) -> Void) {
+        begin(url: url, options: options, started: started) { content in
             guard let window = content.windows.first(where: { $0.windowID == windowID }) else { throw RecorderError.noWindow }
             let scale = NSScreen.screens.first { $0.frame.intersects(window.frame) }?.backingScaleFactor ?? 2
             let config = SCStreamConfiguration()

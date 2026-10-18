@@ -99,5 +99,7 @@ if let flag = arguments.firstIndex(of: "--self-test"), flag + 1 < arguments.coun
     delegate = AppDelegate()
 }
 app.delegate = delegate
-app.setActivationPolicy(.accessory)
+// A regular app: Dock icon, ⌘-Tab, and a window for the recordings library.
+app.setActivationPolicy(.regular)
+MainActor.assumeIsolated { MainMenu.install() }
 app.run()

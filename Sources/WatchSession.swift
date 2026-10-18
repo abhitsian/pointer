@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 
 /// Watch mode: a silent partner. Records the screen at one frame a second with your microphone and the Mac's
 /// own audio, keeps what was on screen and what was said, and writes it up afterwards. Nothing is pasted anywhere.
@@ -26,6 +27,8 @@ final class WatchSession: ActiveCapture {
     /// where it starts in the session, in seconds.
     private var segments: [(url: URL, offset: Double)] = []
     private var screenRect = CGRect.zero
+    /// The screen or window picked in the share picker. Nil watches the screen under the pointer.
+    var share: ShareTarget?
     /// The stall check: what each stream had received at the last look, and when anything was last restarted.
     private var lastCheck = Date()
     private var lastHealthLog = Date()
@@ -81,9 +84,19 @@ final class WatchSession: ActiveCapture {
         }
     }
 
+    /// Starts the recorder on the picked window, or else on `screenRect`.
+    private func capture(to url: URL, started: @escaping (Error?) -> Void) {
+        if case .window(let id) = share {
+            recorder.start(window: id, to: url, options: recordingOptions, started: started)
+        } else {
+            recorder.start(rect: screenRect, to: url, options: recordingOptions, started: started)
+        }
+    }
+
     private func startRecording() {
         guard phase == .starting else { return }
-        let mouse = NSEvent.mouseLocation
+        if case .screen(let frame) = share { screenRect = frame }
+        let mouse = screenRect == .zero ? NSEvent.mouseLocation : CGPoint(x: screenRect.midX, y: screenRect.midY)
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else {
             phase = .over
             onEnd(nil)
@@ -92,7 +105,7 @@ final class WatchSession: ActiveCapture {
         screenRect = screen.frame
         segments = [(videoURL, 0)]
         recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
-        recorder.start(rect: screen.frame, to: videoURL, options: recordingOptions) { [weak self] error in
+        capture(to: videoURL) { [weak self] error in
             guard let self, self.phase == .starting else { return }
             if let error {
                 Log.write("watch: recorder failed \(error)")
@@ -117,9 +130,14 @@ final class WatchSession: ActiveCapture {
     }
 
     /// macOS ended the capture (or it stopped delivering audio). Keep going: start a new recording file, so the
-    /// session runs until the user stops it.
+    /// session runs until the user stops it. Stopping it from the menu bar's screen-recording control counts as
+    /// the user stopping it, so that ends the session and writes it up.
     private func recordingInterrupted(_ error: Error?) {
         guard phase == .watching else { return }
+        if let error = error as? SCStreamError, error.code == .userStopped {
+            Log.write("watch: capture stopped by the user from the menu bar")
+            return stop()
+        }
         lastRestart["recorder"] = Date()
         let offset = Date().timeIntervalSince(started)
         let url = folder.appendingPathComponent("recording-\(segments.count + 1).mov")
@@ -127,9 +145,16 @@ final class WatchSession: ActiveCapture {
         let previous = recorder
         previous.onInterrupted = nil
         previous.stop { _ in }
+        // The screen may have gone (a display unplugged, the lid closed) or changed size: carry on with the same
+        // screen as it is now, or else the one under the mouse, rather than retrying a screen that no longer exists.
+        let center = CGPoint(x: screenRect.midX, y: screenRect.midY), mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(center, $0.frame, false) })
+            ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
+            screenRect = screen.frame
+        }
         recorder = ScreenRecorder()
         recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
-        recorder.start(rect: screenRect, to: url, options: recordingOptions) { [weak self] error in
+        capture(to: url) { [weak self] error in
             guard let self else { return }
             if let error {
                 Log.write("watch: restart failed \(error); trying again in 10 s")

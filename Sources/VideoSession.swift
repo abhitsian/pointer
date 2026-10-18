@@ -37,9 +37,13 @@ final class VideoSession: ActiveCapture {
 
     private var videoURL: URL { folder.appendingPathComponent("recording.mov") }
 
+    /// The screen or window picked in the share picker. Nil records the screen under the pointer.
+    private let share: ShareTarget?
+
     init(mode: Mode, target: Target, hud: HUDController, autoSend: Bool, stopLabel: String,
-         capturesFolder: URL, onEnd: @escaping (CaptureRecord?) -> Void) {
+         capturesFolder: URL, share: ShareTarget? = nil, onEnd: @escaping (CaptureRecord?) -> Void) {
         self.mode = mode
+        self.share = share
         self.target = target
         self.hud = hud
         self.autoSend = autoSend
@@ -73,7 +77,11 @@ final class VideoSession: ActiveCapture {
             let mouse = NSEvent.mouseLocation
             hud.model.status = "Starting recording"
             hud.show()
-            if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
+            if case .window(let id) = share {
+                record(.window(id))
+            } else if case .screen(let frame) = share {
+                record(.rect(frame))
+            } else if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
                 record(.rect(screen.frame))
             } else {
                 cancel()

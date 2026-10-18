@@ -44,14 +44,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         askForPermissions()
         Transcriber.warmUp()
         lastRecording = newestRecording()
+        installCaptureMenu()
         hud.flash("Pointer is ready", hint: "\(shortcut.label) shot   \(shortcut.videoLabel) video   \(shortcut.documentLabel) doc   \(shortcut.watchLabel) watch   \(shortcut.listenLabel) listen", tone: .live, for: 2.5)
     }
 
-    /// Opening Pointer again (Finder, Spotlight, `open`) drops its menu down, so you can find the icon.
+    /// Clicking the Dock icon, or opening Pointer again from Finder or Spotlight, shows the recordings library.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        hud.flash("Pointer is running", hint: "\(shortcut.label) screenshot   \(shortcut.videoLabel) video   \(shortcut.documentLabel) document", tone: .live, for: 2.5)
-        DispatchQueue.main.async { [weak self] in self?.statusItem.button?.performClick(nil) }
-        return false
+        if !flag { LibraryWindow.shared.reopen() }
+        return true
+    }
+
+    /// The window's toolbar buttons, and a Capture menu in Pointer's own menu bar built from the same list as the
+    /// menu-bar icon's menu. Toolbar buttons hide Pointer first, so the capture sees the app you were in and pastes
+    /// back into it, not into Pointer's window.
+    private func installCaptureMenu() {
+        func fromWindow(_ start: @escaping () -> Void) -> () -> Void {
+            { NSApp.hide(nil); DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: start) }
+        }
+        MainActor.assumeIsolated {
+            LibraryWindow.shared.actions = [
+                .init(id: "shot", label: "Screenshot", symbol: "camera.viewfinder",
+                      tip: "Talk and drag-select an area (\(shortcut.label))", run: fromWindow { [weak self] in self?.shortcutPressed(.screenshot) }),
+                .init(id: "video", label: "Record", symbol: "record.circle",
+                      tip: "Record the screen, press again to stop (\(shortcut.videoLabel))", run: fromWindow { [weak self] in self?.shortcutPressed(.video) }),
+                .init(id: "doc", label: "Document", symbol: "doc.text.viewfinder",
+                      tip: "Read the front window as you scroll (\(shortcut.documentLabel))", run: fromWindow { [weak self] in self?.shortcutPressed(.document) }),
+                .init(id: "watch", label: "Watch", symbol: "eye",
+                      tip: "Silent session, written up when you stop (\(shortcut.watchLabel))", run: fromWindow { [weak self] in self?.shortcutPressed(.watch) }),
+                .init(id: "listen", label: "Listen", symbol: "ear",
+                      tip: "Watch and suggest questions (\(shortcut.listenLabel))", run: fromWindow { [weak self] in self?.shortcutPressed(.listen) }),
+                .init(id: "folder", label: "Captures", symbol: "folder",
+                      tip: "Open ~/Pictures/Pointer in Finder", run: { [weak self] in self?.openFolder() }),
+            ]
+            let capture = NSMenuItem(title: "Capture", action: nil, keyEquivalent: "")
+            let menu = NSMenu(title: "Capture")
+            menu.delegate = self
+            capture.submenu = menu
+            NSApp.mainMenu?.insertItem(capture, at: 2)
+        }
     }
 
     // MARK: Capture
@@ -89,24 +119,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func shortcutPressed(_ kind: Kind) {
         Log.write("hotkey: \(kind.rawValue) pressed, capture=\(session != nil) watching=\(watching != nil)")
-        if kind == .watch { return watching == nil ? startWatching() : watching?.shortcutPressed() ?? () }
-        if kind == .listen { return watching == nil ? startListening() : watching?.shortcutPressed() ?? () }
+        if kind == .watch { return watching == nil ? chooseAndWatch(listen: false) : watching?.shortcutPressed() ?? () }
+        if kind == .listen { return watching == nil ? chooseAndWatch(listen: true) : watching?.shortcutPressed() ?? () }
         if let session { return session.shortcutPressed() }
         switch kind {
         case .screenshot: startCapture()
-        case .video: startVideo()
+        case .video: chooseAndRecord()
         case .document: startDocument()
         case .watch, .listen: break
         }
     }
 
     /// Watch mode: a silent session that records and writes itself up, with nothing pasted anywhere.
-    @objc private func startWatching() { beginWatch(listen: false) }
+    @objc private func startWatching() { chooseAndWatch(listen: false) }
 
     /// Listen and ask: watch mode that also suggests questions worth asking as you listen.
-    @objc private func startListening() { beginWatch(listen: true) }
+    @objc private func startListening() { chooseAndWatch(listen: true) }
 
-    private func beginWatch(listen: Bool) {
+    /// Asks which screen or window to watch, like Zoom's Share Screen, then starts.
+    private func chooseAndWatch(listen: Bool) {
+        guard watching == nil else { return watching?.shortcutPressed() ?? () }
+        guard CGPreflightScreenCaptureAccess() else { return beginWatch(listen: listen, share: nil) }
+        MainActor.assumeIsolated {
+            SharePicker.shared.choose(title: listen ? "Choose what to listen along to" : "Choose what to watch", allowArea: false) { [weak self] target in
+                if let target { self?.beginWatch(listen: listen, share: target) }
+            }
+        }
+    }
+
+    /// Asks which screen or window to record, or an area to drag out, then starts.
+    private func chooseAndRecord() {
+        guard session == nil else { return }
+        guard CGPreflightScreenCaptureAccess() else { return record(.screen) }
+        MainActor.assumeIsolated {
+            SharePicker.shared.choose(title: "Choose what to record", allowArea: true) { [weak self] target in
+                guard let self, let target else { return }
+                if case .area = target { self.record(.area) } else { self.record(.screen, share: target) }
+            }
+        }
+    }
+
+    private func beginWatch(listen: Bool, share: ShareTarget?) {
         guard watching == nil else { return watching?.shortcutPressed() ?? () }
         guard CGPreflightScreenCaptureAccess() else {
             hud.flash("Pointer needs Screen Recording", hint: "allow it, then relaunch Pointer", for: 5)
@@ -136,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.writingUp.append(session)
             self.refreshWatchTitle()
         }
+        session.share = share
         watching = session
         session.start()
     }
@@ -157,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openLastWatch() {
-        if let page = lastWatchPage { NSWorkspace.shared.open(page) }
+        if let page = lastWatchPage { MainActor.assumeIsolated { LibraryWindow.shared.show(page) } }
     }
 
     @objc private func toggleMeetingAudio() {
@@ -181,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func startVideo() {
-        record(.screen)
+        chooseAndRecord()
     }
 
     @objc private func startAreaVideo() {
@@ -192,11 +246,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         record(.document)
     }
 
-    private func record(_ mode: VideoSession.Mode) {
+    private func record(_ mode: VideoSession.Mode, share: ShareTarget? = nil) {
         guard let target = readyTarget() else { return }
         let stop = mode == .document ? shortcut.documentLabel : shortcut.videoLabel
         let session = VideoSession(mode: mode, target: target, hud: hud, autoSend: autoSend, stopLabel: stop,
-                                   capturesFolder: folder) { [weak self] record in
+                                   capturesFolder: folder, share: share) { [weak self] record in
             self?.session = nil
             if let record {
                 self?.lastCapture = record
@@ -236,6 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        // The Capture menu in Pointer's own menu bar reuses this list; its single-letter keys would clash with ⌘V, ⌘W and ⌘Q.
+        defer { if menu !== statusItem.menu { menu.items.forEach { $0.keyEquivalent = "" } } }
 
         if watching != nil {
             let stop = NSMenuItem(title: watching?.listen == true ? "Stop listening and write it up" : "Stop watching and write it up",
@@ -421,12 +477,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerShortcut()
     }
 
-    /// Rebuilds the library page (adding pages for any older captures) and opens it in the browser.
+    /// Rebuilds the library page (adding pages for any older captures) and shows it in Pointer's window.
     @objc private func openLibrary() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let url = Viewer.rebuildLibrary()
-            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
-        }
+        MainActor.assumeIsolated { LibraryWindow.shared.showLibrary() }
     }
 
     @objc private func openFolder() {

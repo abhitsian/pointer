@@ -67,7 +67,7 @@ iconutil -c icns "$BUILD/$APP.iconset" -o "$BUNDLE/Contents/Resources/$APP.icns"
 
 echo "→ Compiling…"
 swiftc -O -swift-version 5 -target arm64-apple-macos26 \
-  -framework AppKit -framework SwiftUI -framework AVFoundation -framework Speech -framework Carbon -framework ScreenCaptureKit \
+  -framework AppKit -framework SwiftUI -framework AVFoundation -framework Speech -framework Carbon -framework ScreenCaptureKit -framework WebKit \
   -o "$BUNDLE/Contents/MacOS/$APP" Sources/*.swift
 
 cp Info.plist "$BUNDLE/Contents/Info.plist"

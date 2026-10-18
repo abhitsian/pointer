@@ -44,7 +44,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             if response.actionIdentifier == "folder" {
                 NSWorkspace.shared.activateFileViewerSelecting([page])
             } else {
-                NSWorkspace.shared.open(page)
+                DispatchQueue.main.async { LibraryWindow.shared.show(page) }
             }
         }
         done()
