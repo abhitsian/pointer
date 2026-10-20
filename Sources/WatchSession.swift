@@ -55,7 +55,7 @@ final class WatchSession: ActiveCapture {
     private var following: Bool { if case .follow = share { return true } else { return false } }
 
     /// Longest watch, in seconds.
-    private let limit: TimeInterval = 4 * 3600
+    private let limit: TimeInterval = 8 * 3600
 
     private var videoURL: URL { folder.appendingPathComponent("recording.mov") }
 

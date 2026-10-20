@@ -39,6 +39,8 @@ final class VideoSession: ActiveCapture {
 
     /// The screen or window picked in the share picker. Nil records the screen under the pointer.
     private let share: ShareTarget?
+    /// The amber edge frame around what is being recorded, the same one watch sessions show.
+    private let edge = ShareFrame()
 
     init(mode: Mode, target: Target, hud: HUDController, autoSend: Bool, stopLabel: String,
          capturesFolder: URL, share: ShareTarget? = nil, onEnd: @escaping (CaptureRecord?) -> Void) {
@@ -122,6 +124,7 @@ final class VideoSession: ActiveCapture {
         phase = .over
         clock?.invalidate()
         clicks.stop()
+        edge.hide()
         hud.onStop = nil
         recorder.stop { [folder] _ in try? FileManager.default.removeItem(at: folder) }
         transcriber.cancel()
@@ -153,6 +156,10 @@ final class VideoSession: ActiveCapture {
             }
             self.phase = .recording
             self.recordingStarted = Date()
+            switch source {
+            case .rect(let rect): self.edge.show(screen: rect)
+            case .window(let id): self.edge.show(window: id)
+            }
             if self.mode != .document { self.clicks.start() }
             Log.write("video: recording mode=\(self.mode) voice=\(self.voice)")
             self.hud.model.hint = "\(self.stopLabel) stops"
@@ -182,6 +189,7 @@ final class VideoSession: ActiveCapture {
         phase = .processing
         clock?.invalidate()
         clicks.stop()
+        edge.hide()
         hud.onStop = nil
         hud.model.listening = false
         hud.model.hint = ""

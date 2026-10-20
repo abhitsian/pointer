@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 
-/// The edge frame shown while a watch session records: a pulsing amber border around the watched screen, or
+/// The edge frame shown while Pointer records (watch sessions and video recordings): a pulsing amber border around the watched screen, or
 /// around the watched window wherever it moves. Clicks pass through it, and recordings leave it out (screen
 /// recordings exclude Pointer's windows; window recordings only see that window). Main thread only.
 final class ShareFrame {
