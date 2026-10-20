@@ -2,6 +2,10 @@ import AVFoundation
 import AppKit
 
 let arguments = CommandLine.arguments
+// `Pointer --ctl <command> …`: talk to the running app from a chat, then exit.
+if let flag = arguments.firstIndex(of: "--ctl") {
+    exit(Control.send(Array(arguments[(flag + 1)...])))
+}
 if let flag = arguments.firstIndex(of: "--render-hud"), flag + 1 < arguments.count {
     MainActor.assumeIsolated { HUDPreview.render(to: arguments[flag + 1]) }
     exit(0)

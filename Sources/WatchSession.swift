@@ -14,7 +14,7 @@ final class WatchSession: ActiveCapture {
 
     private let hud: HUDController
     private let stopLabel: String
-    private let folder: URL
+    let folder: URL
     private let onEnd: (URL?) -> Void
     /// Reports the elapsed time so the menu bar can show it.
     var onTick: ((String?) -> Void)?
@@ -44,6 +44,15 @@ final class WatchSession: ActiveCapture {
     private var clock: Timer?
     private var context: [(at: Date, app: String, window: String)] = []
     private var meetingAudio = false
+    /// The amber border around what is being recorded.
+    private let edge = ShareFrame()
+    /// What was clicked, by label (never keystrokes), so a session can be turned into steps.
+    private let clickLog = ClickLog()
+    /// Follow my pointer: the screen the mouse moved to, and since when (it must stay a second before switching).
+    private var follower: Timer?
+    private var pendingScreen: (frame: CGRect, since: Date)?
+    private var switching = false
+    private var following: Bool { if case .follow = share { return true } else { return false } }
 
     /// Longest watch, in seconds.
     private let limit: TimeInterval = 4 * 3600
@@ -120,6 +129,54 @@ final class WatchSession: ActiveCapture {
                            hint: "\(self.stopLabel) stops · nothing is sent anywhere", tone: .live, for: 3)
             self.noteContext()
             self.clock = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
+            self.showEdge()
+            self.clickLog.start()
+            if self.following {
+                self.follower = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in self?.followPointer() }
+            }
+        }
+    }
+
+    private func showEdge() {
+        if case .window(let id) = share { edge.show(window: id) } else { edge.show(screen: screenRect) }
+    }
+
+    private func endFollowing() {
+        clickLog.stop()
+        follower?.invalidate()
+        follower = nil
+        edge.hide()
+    }
+
+    /// Follow my pointer: once the mouse has sat on another screen for a second, record that screen instead,
+    /// as a new piece of the recording.
+    private func followPointer() {
+        guard phase == .watching, !switching else { return }
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) else { return }
+        guard screen.frame != screenRect else { pendingScreen = nil; return }
+        if pendingScreen?.frame != screen.frame { pendingScreen = (screen.frame, Date()); return }
+        guard let pending = pendingScreen, Date().timeIntervalSince(pending.since) >= 1 else { return }
+        pendingScreen = nil
+        switching = true
+        lastRestart["recorder"] = Date()
+        let url = folder.appendingPathComponent("recording-\(segments.count + 1).mov")
+        Log.write("watch: following the pointer to \(screen.localizedName) at \(WatchSession.clock(Date().timeIntervalSince(started)))")
+        let previous = recorder
+        previous.onInterrupted = nil
+        previous.stop { _ in }
+        screenRect = screen.frame
+        edge.show(screen: screenRect)
+        recorder = ScreenRecorder()
+        recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
+        capture(to: url) { [weak self] error in
+            guard let self else { return }
+            self.switching = false
+            if let error {
+                Log.write("watch: switch failed \(error)")
+                return self.recordingInterrupted(error)
+            }
+            self.segments.append((url, Date().timeIntervalSince(self.started)))
         }
     }
 
@@ -152,6 +209,7 @@ final class WatchSession: ActiveCapture {
             ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
             screenRect = screen.frame
         }
+        if !isWindow { edge.show(screen: screenRect) }
         recorder = ScreenRecorder()
         recorder.onInterrupted = { [weak self] error in self?.recordingInterrupted(error) }
         capture(to: url) { [weak self] error in
@@ -202,6 +260,30 @@ final class WatchSession: ActiveCapture {
         }
     }
 
+    // MARK: Looking in from chat
+
+    /// Whether the session is recording now (not starting, not being written up).
+    var isLive: Bool { phase == .watching }
+    var elapsed: TimeInterval { phase == .watching ? Date().timeIntervalSince(started) : 0 }
+    /// What is being recorded: the picked window or screen, else the screen it settled on.
+    var watched: ShareTarget { isWindow ? share! : .screen(screenRect) }
+    private var isWindow: Bool { if case .window = share { return true } else { return false } }
+
+    /// What was said in the last `seconds`, as `[m:ss] Speaker: text` lines.
+    func recentTranscript(seconds: TimeInterval) -> String {
+        let from = elapsed - seconds
+        return utterances(from: (you.words + others.words).filter { $0.start >= from }, started: started)
+            .map { "[\(WatchSession.clock($0.start))] \($0.speaker ?? "Others"): \($0.text)" }.joined(separator: "\n")
+    }
+
+    /// The front app and window over time, as `[m:ss] App · Window` lines.
+    var contextLines: [String] {
+        context.map { item in
+            let at = WatchSession.clock(item.at.timeIntervalSince(started))
+            return "[\(at)] \(item.app)\(item.window.isEmpty ? "" : " · \(item.window)")"
+        }
+    }
+
     /// The watch shortcut again: stop and write it up.
     func shortcutPressed() {
         if phase == .watching { stop() }
@@ -212,6 +294,7 @@ final class WatchSession: ActiveCapture {
         guard phase == .starting || phase == .watching else { return }
         phase = .over
         clock?.invalidate()
+        endFollowing()
         onTick?(nil)
         recorder.stop { [folder] _ in try? FileManager.default.removeItem(at: folder) }
         you.finish(wait: 0.2) { _ in }
@@ -297,6 +380,7 @@ final class WatchSession: ActiveCapture {
         Log.write("watch: stopping")
         phase = .processing
         clock?.invalidate()
+        endFollowing()
         onTick?(nil)
         let started = self.started
         let seconds = Date().timeIntervalSince(started)
@@ -350,9 +434,17 @@ final class WatchSession: ActiveCapture {
             try? transcript.write(to: folder.appendingPathComponent("transcript.txt"), atomically: true, encoding: .utf8)
         }
 
+        let clicked = clickLog.clicks.map { (click: $0, at: $0.time.timeIntervalSince(started)) }
+        if !clicked.isEmpty {
+            let lines = clicked.map { "[\(WatchSession.clock($0.at))] \($0.click.app): \($0.click.target)" }
+            try? lines.joined(separator: "\n").write(to: folder.appendingPathComponent("clicks.txt"), atomically: true, encoding: .utf8)
+        }
         var notes: [SessionPage.Frame] = []
         for (i, frame) in frames.enumerated() {
             var note = SessionPage.Frame(file: frame.url.lastPathComponent, time: frame.time)
+            // The clicks since the previous key frame, up to this one.
+            let from = i > 0 ? frames[i - 1].time : -1
+            note.clicks = clicked.filter { $0.at > from && $0.at <= frame.time }.map(\.click.target)
             if i > 0 {
                 let images = ScreenText.image(at: frames[i - 1].url).flatMap { a in ScreenText.image(at: frame.url).map { (a, $0) } }
                 let change = ScreenText.changes(from: screenText[i - 1], to: screenText[i], images: images)
@@ -372,6 +464,7 @@ final class WatchSession: ActiveCapture {
         page.video = "recording.mov"
         page.voice = true
         page.cues = cues
+        page.clicks = clicked.map { SessionPage.Click(time: $0.at, target: $0.click.target, app: $0.click.app) }
         page.summary = nil
         let written = Digest.write(transcript: transcript, screen: screenText, frames: notes,
                                    context: contextTimeline(started: started), minutes: Int(seconds / 60),

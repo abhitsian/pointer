@@ -37,11 +37,13 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
         window?.makeKeyAndOrderFront(nil)
     }
 
-    /// Brings the window back if it exists, otherwise opens the library.
+    /// Brings the window back if it exists, otherwise opens the library. The library is rebuilt either way,
+    /// so captures made while the window was closed show up.
     func reopen() {
         if let window, web?.url != nil {
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
+            if showingLibrary { DispatchQueue.global(qos: .userInitiated).async { Viewer.rebuildLibrary() } }
         } else {
             showLibrary()
         }
@@ -49,10 +51,31 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
 
     @objc func goBack() { web?.goBack() }
     @objc func goForward() { web?.goForward() }
-    @objc func reload() { web?.reload() }
+    /// ⌘R on the library rebuilds it from the folder; on a capture page it reloads the page.
+    @objc func reload() {
+        if showingLibrary { DispatchQueue.global(qos: .userInitiated).async { Viewer.rebuildLibrary() } } else { web?.reload() }
+    }
+
+    private var showingLibrary: Bool {
+        web?.url?.standardizedFileURL == root.appendingPathComponent("index.html").standardizedFileURL
+    }
+
+    /// A capture was saved (or the library rebuilt for any reason): reload if the library is on screen,
+    /// keeping the scroll position.
+    private func libraryChanged() {
+        guard showingLibrary, let web else { return }
+        web.evaluateJavaScript("window.scrollY") { [weak web] y, _ in
+            web?.reload()
+            self.restoreScroll = y as? Double
+        }
+    }
+    private var restoreScroll: Double?
 
     private func makeWindowIfNeeded() -> WKWebView {
         if let web { return web }
+        NotificationCenter.default.addObserver(forName: Viewer.libraryChanged, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { LibraryWindow.shared.libraryChanged() }
+        }
         let config = WKWebViewConfiguration()
         // navigator.clipboard is refused on file:// pages, so the pages' Copy buttons go through the app instead.
         config.userContentController.add(self, name: "copy")
@@ -124,6 +147,10 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         window?.title = webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Pointer"
+        if let y = restoreScroll {
+            restoreScroll = nil
+            webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+        }
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {

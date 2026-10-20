@@ -8,6 +8,8 @@ enum ShareTarget {
     case window(CGWindowID)
     /// Drag out an area instead (video only).
     case area
+    /// Whichever screen the mouse is on, switching as it moves (watch and listen).
+    case follow
 }
 
 /// The "choose what to share" sheet, like Zoom's Share Screen: a thumbnail for every screen and every open window.
@@ -74,7 +76,7 @@ private final class KeyPanel: NSPanel {
 
 /// One tile in the picker.
 struct ShareSource: Identifiable {
-    enum Kind { case screen, window, area }
+    enum Kind { case screen, window, area, follow }
     let id: String
     let kind: Kind
     let title: String
@@ -119,6 +121,9 @@ final class ShareModel: ObservableObject {
         if allowArea {
             screens.append(ShareSource(id: "area", kind: .area, title: "Part of the screen", subtitle: "Drag out an area",
                                        icon: nil, target: .area))
+        } else if NSScreen.screens.count > 1 {
+            screens.append(ShareSource(id: "follow", kind: .follow, title: "Follow my pointer",
+                                       subtitle: "Switches screens as the mouse moves", icon: nil, target: .follow))
         }
         // Real app windows only: normal level, a usable size, and not Pointer, the Dock or the menu bar.
         let skip: Set<String> = ["com.apple.dock", "com.apple.WindowManager", "com.apple.controlcenter",
@@ -229,6 +234,8 @@ private struct ShareView: View {
                 RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06))
                 if let image = source.thumbnail {
                     Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fit).padding(4)
+                } else if source.kind == .follow {
+                    Image(systemName: "cursorarrow.motionlines").font(.system(size: 34, weight: .light)).foregroundStyle(.secondary)
                 } else if source.kind == .area {
                     Image(systemName: "rectangle.dashed").font(.system(size: 34, weight: .light)).foregroundStyle(.secondary)
                 } else {
@@ -241,7 +248,7 @@ private struct ShareView: View {
                 if let icon = source.icon {
                     Image(nsImage: icon).resizable().frame(width: 16, height: 16)
                 } else {
-                    Image(systemName: source.kind == .area ? "crop" : "display").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Image(systemName: source.kind == .area ? "crop" : source.kind == .follow ? "cursorarrow" : "display").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(source.title).font(.system(size: 12, weight: .medium)).lineLimit(1)

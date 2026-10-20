@@ -83,9 +83,49 @@ recording, so tell people when you capture a meeting this way.
 Ask about sessions later in Claude Code with `/pointer` (`/pointer ask …`, `/pointer missed`,
 `/pointer context`). **Copy for Claude** on any page copies the whole session as text for any conversation.
 
+## Choosing what to share, and following you
+
+Record (⌃⌥V), Watch (⌃⌥W) and Listen (⌃⌥Q) first open a "choose what to share" panel with a thumbnail of every
+screen and window. Return shares the screen under the pointer. Watch and Listen add **Follow my pointer** when
+more than one screen is connected: Pointer records whichever screen the mouse is on, and switches once the mouse
+has stayed on another screen for a second. Each switch starts a new piece of the recording; the write-up places
+frames from every piece on one timeline.
+
+While a watch or listen session records, a pulsing amber frame sits on the edges of the watched screen, or just
+outside the watched window and moving with it. Clicks pass through it and recordings leave it out.
+
+Watch sessions also log what you click, by the label of the button, link or field (never keystrokes), into
+`clicks.txt` and each frame's notes.
+
+## Control from a chat or another app
+
+`Pointer --ctl <command>` talks to the running app and prints a JSON reply. `~/.local/bin/pointer` can be a
+two-line shim for it:
+
+```sh
+#!/bin/sh
+exec "$HOME/Applications/Pointer.app/Contents/MacOS/Pointer" --ctl "$@"
+```
+
+| Command | What it does |
+|---|---|
+| `pointer targets` | every screen (name, number, which one has the mouse) and every window (app, title, id) |
+| `pointer start <what> [--listen]` | start a watch session. `<what>` is a screen name word (`benq`, `built-in`), `screen 2`, `main`, `laptop`, an app or window-title word (`chrome`, `zoom`), an id from `targets`, `follow`, or nothing for the screen under the mouse |
+| `pointer status` | whether a session is running, how long, its folder, sessions still being written up |
+| `pointer peek [minutes]` | a screenshot of the watched screen or window now, plus what was said in the last few minutes (default 3) |
+| `pointer stop` | stop and write it up in the background |
+| `pointer cancel` | stop and discard it |
+
+Requests go over a distributed notification; replies are files in `~/Pictures/Pointer/.control/`. Only one
+watch session runs at a time. The `/pointer` Claude Code skill uses these commands to start and stop recordings
+when you ask in chat, and `peek` to keep an eye on something for you.
+
+[Handle](https://github.com/abhitsian/handle) uses it too: `tab rec start t7` focuses a Chrome tab and records its
+window while Handle clicks and types, and `tab watch … --record` records for the length of a watch.
+
 ## Library
 
-Every capture gets a page, and **Open recordings library** in the menu opens `~/Pictures/Pointer/index.html`: the newest capture large at the top, the rest grouped by day, with search over what you said and filters for videos, documents and screenshots.
+Every capture gets a page, and **Open recordings library** in the menu (or clicking the Dock icon) shows `~/Pictures/Pointer/index.html` in Pointer's own window, which reloads when a capture is saved: the newest capture large at the top, the rest grouped by day, with search over what you said and filters for videos, documents and screenshots.
 
 Every capture gets a title of its own: for watch sessions from the write-up, otherwise from what you said or the
 document it came from. **To review** filters the library to captures you haven't marked reviewed yet.
@@ -152,6 +192,10 @@ Pointer logs each capture to `~/Library/Logs/Pointer.log`.
 | `Sources/SpeechStream.swift` | One long-running `Analyzer` per audio source for watch mode |
 | `Sources/ScreenTranscript.swift` | Writes `screen.txt`: the OCR'd text of every key frame and screenshot |
 | `mcp/server.js` | MCP server: search and read captures and Cuecard meeting notes |
+| `Sources/Control.swift` | `Pointer --ctl`: start, stop, status and peek from a chat or another app |
+| `Sources/ShareFrame.swift` | The amber frame around what a watch session records |
+| `Sources/SharePicker.swift` | The choose-what-to-share panel |
+| `Sources/LibraryWindow.swift` | Pointer's window for the library and capture pages |
 | `Sources/Delivery.swift` | Target tracking, focusing the target, clipboard and ⌘V |
 | `Sources/HUD.swift` | The floating status pill |
 | `Sources/HotKey.swift` | Global shortcuts through Carbon |

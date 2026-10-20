@@ -103,8 +103,12 @@ enum Viewer {
         if let json = try? encoder.encode(entries), let html = fill("library", with: json) {
             try? html.write(to: url, atomically: true, encoding: .utf8)
         }
+        // The library window reloads when it is showing the library, so new captures appear without a relaunch.
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Viewer.libraryChanged, object: nil) }
         return url
     }
+
+    static let libraryChanged = Notification.Name("PointerLibraryChanged")
 
     /// A label for a session that never got one: what was said, the document it came from, or where it was taken.
     static func label(for page: SessionPage) -> String? {

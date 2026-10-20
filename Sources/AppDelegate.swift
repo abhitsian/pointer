@@ -45,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Transcriber.warmUp()
         lastRecording = newestRecording()
         installCaptureMenu()
+        DistributedNotificationCenter.default().addObserver(forName: Control.name, object: nil, queue: .main) { [weak self] note in
+            guard let info = note.userInfo as? [String: String], let id = info["id"] else { return }
+            MainActor.assumeIsolated { self?.handleControl(id: id, info: info) }
+        }
         hud.flash("Pointer is ready", hint: "\(shortcut.label) shot   \(shortcut.videoLabel) video   \(shortcut.documentLabel) doc   \(shortcut.watchLabel) watch   \(shortcut.listenLabel) listen", tone: .live, for: 2.5)
     }
 
@@ -551,6 +555,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
                 }
             }
+        }
+    }
+}
+
+// MARK: Control from chat
+
+extension AppDelegate {
+    /// One request from `Pointer --ctl`. Every path writes exactly one reply.
+    @MainActor fileprivate func handleControl(id: String, info: [String: String]) {
+        let cmd = info["cmd"] ?? "", target = info["target"] ?? ""
+        Log.write("control: \(cmd) \(target)")
+        switch cmd {
+        case "targets":
+            Task { @MainActor in
+                let all = await Control.sources()
+                Control.reply(id, ["ok": true, "targets": all.map(\.json)])
+            }
+        case "start", "watch", "record", "listen":
+            if let watching {
+                return Control.reply(id, ["ok": false, "error": "Already watching", "folder": watching.folder.path,
+                                          "elapsed": Int(watching.elapsed)])
+            }
+            guard CGPreflightScreenCaptureAccess() else {
+                return Control.reply(id, ["ok": false, "error": "Pointer needs Screen Recording permission"])
+            }
+            Task { @MainActor in
+                let (source, all) = await Control.resolve(target)
+                guard let source else {
+                    return Control.reply(id, ["ok": false, "error": "No screen or window matches \"\(target)\"",
+                                              "targets": all.map(\.json)])
+                }
+                self.beginWatch(listen: cmd == "listen" || info["listen"] == "1", share: source.target)
+                guard let session = self.watching else {
+                    return Control.reply(id, ["ok": false, "error": "The session did not start"])
+                }
+                // Wait for the recorder to come up so the reply says whether it is really recording.
+                for _ in 0..<50 where !session.isLive { try? await Task.sleep(for: .milliseconds(100)) }
+                Control.reply(id, ["ok": session.isLive, "folder": session.folder.path, "watching": source.json,
+                                   "listen": session.listen, "error": session.isLive ? NSNull() : "Recorder did not start within 5 s" as Any])
+            }
+        case "stop":
+            guard let session = watching else {
+                return Control.reply(id, ["ok": false, "error": "Nothing is being watched", "writingUp": writingUp.map(\.folder.path)])
+            }
+            let seconds = Int(session.elapsed)
+            session.shortcutPressed()
+            Control.reply(id, ["ok": true, "folder": session.folder.path, "seconds": seconds,
+                               "note": "Writing up in the background; session.json drops processing when done"])
+        case "cancel":
+            guard let session = watching else { return Control.reply(id, ["ok": false, "error": "Nothing is being watched"]) }
+            let folder = session.folder.path
+            discardWatching()
+            Control.reply(id, ["ok": true, "discarded": folder])
+        case "status":
+            var body: [String: Any] = ["ok": true, "watching": watching != nil, "writingUp": writingUp.map(\.folder.path),
+                                       "capture": session != nil]
+            if let watching {
+                body["folder"] = watching.folder.path
+                body["elapsed"] = Int(watching.elapsed)
+                body["listen"] = watching.listen
+            }
+            Control.reply(id, body)
+        case "peek":
+            guard let session = watching, session.isLive else { return Control.reply(id, ["ok": false, "error": "Nothing is being watched"]) }
+            let minutes = Double(target).map { $0 * 60 } ?? 180
+            Task { @MainActor in
+                let image = await Control.screenshot(session.watched)
+                var body: [String: Any] = ["ok": true, "folder": session.folder.path, "elapsed": Int(session.elapsed),
+                                           "said": session.recentTranscript(seconds: minutes),
+                                           "context": Array(session.contextLines.suffix(8))]
+                if let image { body["screenshot"] = image.path } else { body["screenshotError"] = "Could not capture the screen" }
+                Control.reply(id, body)
+            }
+        default:
+            Control.reply(id, ["ok": false, "error": "Unknown command \(cmd)"])
         }
     }
 }
