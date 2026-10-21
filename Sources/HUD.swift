@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
 
+/// A button on the HUD, e.g. Paste into Terminal after a recording.
+struct HUDAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let primary: Bool
+    let run: () -> Void
+}
+
 final class HUDModel: ObservableObject {
     enum Tone { case live, done, error }
 
@@ -16,12 +24,16 @@ final class HUDModel: ObservableObject {
     /// Shows a Stop button while a recording runs.
     @Published var showsStop = false
     var stop: (() -> Void)?
+    @Published var actions: [HUDAction] = []
+    /// Shrinks the pill to a small chip with the status line.
+    @Published var minimized = false
 
     static let defaultPlaceholder = "Say what's wrong while you drag over it"
 
     func reset() {
         status = ""; hint = ""; transcript = ""; level = 0
         listening = false; tone = .live; countdown = nil; showsStop = false
+        actions = []; minimized = false
         placeholder = HUDModel.defaultPlaceholder
     }
 }
@@ -38,7 +50,9 @@ struct HUDView: View {
     @ObservedObject var model: HUDModel
 
     var body: some View {
-        HUDPill(model: model)
+        Group {
+            if model.minimized { HUDChip(model: model) } else { HUDPill(model: model) }
+        }
             .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
@@ -81,6 +95,19 @@ struct HUDPill: View {
             LevelMeter(level: model.level)
                 .opacity(model.listening ? 1 : 0)
 
+            ForEach(model.actions) { action in
+                Button(action: action.run) {
+                    Text(action.title).font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(action.primary ? Palette.ink : .white.opacity(0.85))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(action.primary ? Palette.tan : .white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+
             if model.showsStop {
                 Button(action: { model.stop?() }) {
                     HStack(spacing: 6) {
@@ -93,6 +120,17 @@ struct HUDPill: View {
                     .background(Capsule().fill(Palette.tan))
                 }
                 .buttonStyle(.plain)
+            }
+
+            if model.showsStop || !model.actions.isEmpty {
+                Button(action: { model.minimized = true }) {
+                    Image(systemName: "minus").font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .help("Minimize")
             }
         }
         .padding(.horizontal, 18)
@@ -127,6 +165,33 @@ struct HUDPill: View {
 
     private var glyphTint: Color {
         model.tone == .error ? Palette.error : Palette.tan
+    }
+}
+
+/// The minimized HUD: the mark and the status line. Click to bring the full pill back.
+struct HUDChip: View {
+    @ObservedObject var model: HUDModel
+
+    var body: some View {
+        Button(action: { model.minimized = false }) {
+            HStack(spacing: 8) {
+                MarkGlyph(tint: model.tone == .error ? Palette.error : Palette.tan)
+                    .frame(width: 20, height: 15)
+                Text(model.status.uppercased())
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .tracking(0.9)
+                    .foregroundStyle(model.tone == .done ? Palette.done : Palette.tan)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Palette.ink.opacity(0.94)))
+            .overlay(Capsule().strokeBorder(.white.opacity(0.09)))
+        }
+        .buttonStyle(.plain)
+        .help("Expand")
     }
 }
 
@@ -175,14 +240,25 @@ final class HUDController {
         didSet {
             model.stop = onStop
             model.showsStop = onStop != nil
-            panel.ignoresMouseEvents = onStop == nil
+            updateClicks()
         }
+    }
+
+    /// Buttons such as Paste and Close. The panel takes clicks while any are shown.
+    var actions: [HUDAction] {
+        get { model.actions }
+        set { model.actions = newValue; updateClicks() }
+    }
+
+    private func updateClicks() {
+        panel.ignoresMouseEvents = onStop == nil && model.actions.isEmpty
     }
     private lazy var panel: NSPanel = makePanel()
     private var hideWork: DispatchWorkItem?
 
     func show() {
         hideWork?.cancel()
+        updateClicks()
         position()
         panel.alphaValue = 1
         panel.orderFrontRegardless()
@@ -206,6 +282,7 @@ final class HUDController {
     /// Shows a one-line message on its own, e.g. when a capture can't start.
     func flash(_ status: String, hint: String = "", tone: HUDModel.Tone = .error, for seconds: TimeInterval = 3) {
         model.reset()
+        updateClicks()
         model.status = status
         model.hint = hint
         model.tone = tone
@@ -264,6 +341,7 @@ enum HUDPreview {
             ("Got the shot · keep talking", "⏎ send   esc cancel",
              "The save button sits under the footer on narrow windows, and the toast covers the error text", 0.7, 0.55, .live),
             ("● Recording 0:07", "⌃⌥V stops", "When I pick Canada the page jumps back to the top", 0.6, nil, .live),
+            ("12 frames · saved", "", "When I pick Canada the page jumps back to the top", 0, nil, .done),
             ("Sent to Terminal", "", "The save button sits under the footer on narrow windows.", 0, nil, .done),
             ("No assistant open", "open Terminal or Claude first", "", 0, nil, .error),
         ]
@@ -277,6 +355,10 @@ enum HUDPreview {
                     model.listening = s.5 == .live
                     if s.5 == .error { model.placeholder = "" }
                     model.showsStop = s.0.hasPrefix("●")
+                    if s.0.hasSuffix("saved") {
+                        model.actions = [HUDAction(title: "Paste in Terminal", primary: true) {},
+                                         HUDAction(title: "Close", primary: false) {}]
+                    }
                     return model
                 }())
             }

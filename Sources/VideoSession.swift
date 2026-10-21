@@ -31,7 +31,7 @@ final class VideoSession: ActiveCapture {
     private var documentSource = ""
 
     /// Longest recording, in seconds.
-    private let limit = 120
+    private let limit = 6 * 3600
     /// Speech recognition reports words about this long after they are spoken.
     private static let recognitionLag: TimeInterval = 0.8
 
@@ -170,17 +170,26 @@ final class VideoSession: ActiveCapture {
         switch source {
         case .rect(let rect):
             hud.keepClear(of: rect)
-            recorder.start(rect: rect, to: videoURL, voice: voice, started: begun)
+            recorder.start(rect: rect, to: videoURL, options: recordingOptions, started: begun)
         case .window(let id):
-            recorder.start(window: id, to: videoURL, voice: voice, started: begun)
+            recorder.start(window: id, to: videoURL, options: recordingOptions, started: begun)
         }
+    }
+
+    /// 10 fps at 1x keeps a 6-hour recording near 1-2 GB; full Retina at 30 fps runs about 25 MB a minute.
+    private var recordingOptions: ScreenRecorder.Options {
+        ScreenRecorder.Options(voice: voice, framesPerSecond: 10, scale: 1)
     }
 
     private func tick() {
         let elapsed = Int(Date().timeIntervalSince(recordingStarted))
         if elapsed >= limit { stop() }
-        let time = "\(elapsed / 60):" + String(format: "%02d", elapsed % 60)
-        hud.model.status = mode == .document ? "● Reading \(time) · scroll through it" : "● Recording \(time)"
+        let time = elapsed >= 3600
+            ? "\(elapsed / 3600):" + String(format: "%02d:%02d", elapsed / 60 % 60, elapsed % 60)
+            : "\(elapsed / 60):" + String(format: "%02d", elapsed % 60)
+        let left = limit - elapsed
+        let ending = left <= 60 ? " · stops in \(left)s" : ""
+        hud.model.status = mode == .document ? "● Reading \(time) · scroll through it\(ending)" : "● Recording \(time)\(ending)"
     }
 
     private func stop() {
@@ -383,13 +392,28 @@ final class VideoSession: ActiveCapture {
         onEnd(nil)
     }
 
+    /// Keeps the recording in the library and waits: nothing reaches the terminal until Paste is clicked.
     private func send(_ parts: [Part], narration: String, label: String) {
+        phase = .over
         hud.model.transcript = narration
+        hud.model.tone = .done
+        hud.model.status = "\(label) · saved"
+        hud.model.hint = ""
+        hud.model.minimized = false
+        hud.actions = [
+            HUDAction(title: "Paste in \(target.name)", primary: true) { self.paste(parts, label: label) },
+            HUDAction(title: "Close", primary: false) { self.hud.actions = []; self.hud.hide() },
+        ]
+        hud.show()
+        onEnd(CaptureRecord(parts: parts, video: videoURL))
+    }
+
+    private func paste(_ parts: [Part], label: String) {
+        hud.actions = []
+        hud.model.tone = .live
         hud.model.status = "Sending to \(target.name)"
-        let video = videoURL
         Deliverer.deliver(parts, to: target, autoSend: autoSend) { [weak self] result in
             guard let self else { return }
-            self.phase = .over
             switch result {
             case .success:
                 self.hud.model.tone = .done
@@ -401,7 +425,6 @@ final class VideoSession: ActiveCapture {
                 self.hud.model.status = error.message
                 self.hud.hide(after: 4)
             }
-            self.onEnd(CaptureRecord(parts: parts, video: video))
         }
     }
 }

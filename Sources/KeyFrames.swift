@@ -22,7 +22,8 @@ enum KeyFrames {
 
     /// 6 frames for recordings up to about 50 s, then one more per 8 s, up to 12.
     static func limit(forSeconds seconds: Double) -> Int {
-        min(12, max(6, Int(seconds / 8)))
+        // One frame per 8 s for short clips, then one per 4 min, up to 90 for a 6-hour recording.
+        seconds <= 96 ? max(6, Int(seconds / 8)) : min(90, 12 + Int((seconds - 96) / 240))
     }
 
     // MARK: Video frames

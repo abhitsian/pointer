@@ -22,7 +22,7 @@ Claude can't take a video file, so Pointer turns a recording into what Claude ca
 
 1. Press **⌃⌥V**. Pointer starts recording the whole screen your pointer is on.
 2. Reproduce the problem and talk through it. Clicks show as circles in the recording.
-3. Press **⌃⌥V** again, or click **Stop** on the HUD, to stop. Recordings stop on their own at 2 minutes.
+3. Press **⌃⌥V** again, or click **Stop** on the HUD, to stop. Recordings stop on their own at 6 hours (the HUD counts down the last minute) and record at 10 fps. When a recording stops, the HUD shows **Paste into Terminal** and **Close**; nothing is pasted until you click Paste. Click **–** on the HUD to shrink it to a small chip while you record.
 
 To record part of the screen, choose **Record an area…** in the menu, then drag the area (Esc cancels).
 

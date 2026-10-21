@@ -309,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
         if session != nil {
-            let stop = NSMenuItem(title: "Stop and send", action: #selector(stopActive), keyEquivalent: "")
+            let stop = NSMenuItem(title: "Stop recording", action: #selector(stopActive), keyEquivalent: "")
             stop.target = self
             menu.addItem(stop)
             let cancel = NSMenuItem(title: "Cancel capture", action: #selector(cancelActive), keyEquivalent: "")
