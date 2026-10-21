@@ -628,6 +628,15 @@ extension AppDelegate {
                 if let image { body["screenshot"] = image.path } else { body["screenshotError"] = "Could not capture the screen" }
                 Control.reply(id, body)
             }
+        case "open":
+            guard let folder = Control.session(target),
+                  FileManager.default.fileExists(atPath: folder.appendingPathComponent("index.html").path) else {
+                return Control.reply(id, ["ok": false, "error": "No session matches \"\(target)\""])
+            }
+            let at = Control.seconds(info["at"] ?? "")
+            Viewer.refresh(folder: folder)
+            LibraryWindow.shared.show(folder.appendingPathComponent("index.html"), at: at)
+            Control.reply(id, ["ok": true, "folder": folder.path, "at": at ?? NSNull()])
         default:
             Control.reply(id, ["ok": false, "error": "Unknown command \(cmd)"])
         }

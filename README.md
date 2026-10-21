@@ -115,6 +115,7 @@ exec "$HOME/Applications/Pointer.app/Contents/MacOS/Pointer" --ctl "$@"
 | `pointer peek [minutes]` | a screenshot of the watched screen or window now, plus what was said in the last few minutes (default 3) |
 | `pointer stop` | stop and write it up in the background |
 | `pointer cancel` | stop and discard it |
+| `pointer open [<session>] [--at m:ss]` | open a session's page in Pointer's window and play from that moment with sound. `<session>` is a folder path, a folder name or its start, or `latest` (the default) |
 
 Requests go over a distributed notification; replies are files in `~/Pictures/Pointer/.control/`. Only one
 watch session runs at a time. The `/pointer` Claude Code skill uses these commands to start and stop recordings
@@ -131,6 +132,25 @@ Every capture gets a title of its own: for watch sessions from the write-up, oth
 document it came from. **To review** filters the library to captures you haven't marked reviewed yet.
 
 A capture's page has the video on the left with captions, and under it a timeline with each key frame pinned at its moment, click markers and bars where you were talking. On the right, the talk track runs frame by frame: the image, the click that led to it, what text appeared or went, and your words with timestamps. The talk track follows playback; click any frame, line or point on the timeline to jump there, or use ← → to step between frames. **Copy what Claude got** copies the text Pointer pasted.
+
+### Asking a session, and finding the moment
+
+Above the right column, **Ask about this session** sends your question, with the session's write-up, its
+timed transcript and the text read off each key frame, to the `claude` command line (your own login, Sonnet).
+The answer cites `[m:ss]` timestamps, and each one is a button that plays the video from there. Follow-up
+questions carry the last six turns. Questions and answers are saved in `session.json` under `asks` and show on
+the page next time. Asking works in Pointer's window; in a browser the box points you to **Copy for Claude**.
+
+Below it, tabs switch between **Notes** (the write-up, its timestamps clickable), **Transcript** (every line,
+searchable with `/`, the line being spoken marked and kept in view) and **Frames** (the talk track).
+Under the video: back and forward 10 s (`J` `L`, `K` pauses), speed 1× to 2× (remembered), the line being
+spoken, and **Copy moment**, which copies `pointer open <session> --at <m:ss>` for pasting into chat. A page
+URL ending `#t=754` or `#t=12:34` opens at that moment.
+
+Speech recognition only ends a line when the speaker pauses, so a lecture can produce one line many minutes
+long. Lines now also end at a sentence after 8 s and at 25 s regardless. For older sessions, the page, the Ask
+prompt and the MCP server split lines over 15 s at sentence ends and place each sentence by its position in
+the text, so a stamp lands within a few seconds of the words.
 
 Pages are static HTML with their data inside, so they open from Finder with no server. Rebuilding the library re-renders every page from its `session.json`, so template changes reach older captures; captures from before pages existed get a `session.json` rebuilt from their files.
 

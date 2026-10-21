@@ -176,6 +176,52 @@ video::cue { font-family: var(--ui); font-size: 0.95em; background: oklch(15% 0.
 .got pre { margin: 12px 0 0; padding: 16px; border-radius: 10px; background: var(--paper-2); font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
 .hint { margin-top: 26px; font-size: 12.5px; color: var(--ink-3); }
 kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 var(--line); }
+/* Playback controls */
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.ctl { height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; font-weight: 550; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); font-variant-numeric: tabular-nums; }
+.ctl:hover { background: var(--paper-2); color: var(--ink); }
+.ctl.on { background: var(--ink); color: var(--paper); box-shadow: none; }
+.controls .gap { flex: 1; }
+.now { margin: 12px 0 0; min-height: 1.4em; font: italic 400 16px/1.45 var(--voice); color: var(--ink-2); }
+.now time { font: 600 12px var(--ui); font-style: normal; color: var(--ember); margin-right: 8px; }
+
+/* Ask */
+.ask { margin: 0 0 18px; padding: 14px; border-radius: 12px; background: var(--paper-2); }
+.ask-label { display: block; margin: 0 0 8px; font-size: 12px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--ember); }
+.ask-row { display: flex; gap: 8px; align-items: flex-end; }
+.ask textarea { flex: 1; min-height: 38px; max-height: 160px; resize: none; padding: 9px 11px; border: 0; border-radius: 9px; font: 400 14.5px/1.4 var(--ui); color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.ask textarea:focus { outline: 2px solid var(--ember); outline-offset: 0; }
+.ask .action.primary { height: 38px; }
+.ask .action.primary:disabled { opacity: .55; cursor: default; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; color: var(--ink-2); background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.chip:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink-3); }
+.ask-note { margin: 10px 0 0; font-size: 13px; color: var(--ink-3); }
+.answers { list-style: none; margin: 0 0 22px; padding: 0; }
+.answer { margin: 0 0 14px; padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+.answer .q { margin: 0 0 6px; font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.answer .q time { font-weight: 500; font-size: 12px; color: var(--ink-3); margin-left: 6px; }
+.answer .a p, .answer .a li { font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
+.answer .a p { margin: 0 0 8px; }
+.answer .a ul { margin: 0 0 8px; padding-left: 18px; }
+.answer .a h3 { margin: 10px 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.answer.pending .a { color: var(--ink-3); font-size: 14px; }
+.answer.failed .a { color: var(--ember); font-size: 14px; }
+.answers .more { font-size: 13px; color: var(--ink-3); }
+
+/* Tabs and panes */
+.tabs { display: flex; gap: 4px; margin: 0 0 18px; border-bottom: 1px solid var(--line); }
+.tab { padding: 8px 12px; margin-bottom: -1px; font-size: 13.5px; font-weight: 600; color: var(--ink-3); border-bottom: 2px solid transparent; }
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); border-bottom-color: var(--ember); }
+.tab .n { font-weight: 500; color: var(--ink-3); margin-left: 5px; font-variant-numeric: tabular-nums; }
+.find { width: 100%; height: 36px; padding: 0 12px; border: 0; border-radius: 9px; font: 400 14px var(--ui); color: var(--ink); background: var(--paper-2); }
+.find:focus { outline: 2px solid var(--ember); outline-offset: 0; }
+.found { margin: 8px 0 6px; font-size: 12.5px; color: var(--ink-3); }
+.script { position: relative; list-style: none; margin: 0; padding: 0 4px 0 0; max-height: calc(100vh - 230px); overflow: auto; overscroll-behavior: contain; }
+.script .line q { font-size: 16px; }
+mark { background: var(--tan-wash); color: var(--ink); border-radius: 3px; padding: 0 1px; }
+
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .beat { animation: none; opacity: 1; } .pin, .pin:hover { transition: none; } }
 @media (max-width: 980px) {
@@ -208,13 +254,42 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
       <div class="track" id="track"><div class="head" id="head"></div></div>
       <div class="scale"><span id="t0">0:00</span><span class="legend"><span><i class="k-click"></i>Click</span><span><i class="k-talk"></i>Talking</span></span><span id="t1"></span></div>
     </div>
-    <p class="hint" id="hint"><kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> previous or next frame · click any frame or line to jump there</p>
+    <div class="controls" id="controls" hidden>
+      <button class="ctl" type="button" data-skip="-10" title="Back 10 seconds (J)">−10 s</button>
+      <button class="ctl" type="button" data-skip="10" title="Forward 10 seconds (L)">+10 s</button>
+      <span class="gap"></span>
+      <button class="ctl" type="button" data-rate="1">1×</button>
+      <button class="ctl" type="button" data-rate="1.25">1.25×</button>
+      <button class="ctl" type="button" data-rate="1.5">1.5×</button>
+      <button class="ctl" type="button" data-rate="2">2×</button>
+      <button class="ctl" type="button" id="moment" title="Copy a link to this moment, for chat">Copy moment</button>
+    </div>
+    <p class="now" id="now" hidden></p>
+    <p class="hint" id="hint"><kbd>Space</kbd> play or pause · <kbd>J</kbd> <kbd>L</kbd> back or forward 10 s · <kbd>←</kbd> <kbd>→</kbd> previous or next frame · <kbd>/</kbd> search the transcript · click any timestamp, frame or line to play from there</p>
   </section>
 
   <aside class="story">
-    <div id="request"></div>
-    <h2 id="story-title">Talk track</h2>
-    <ol class="beats" id="beats"></ol>
+    <form class="ask" id="ask" hidden>
+      <label class="ask-label" for="q">Ask about this session</label>
+      <div class="ask-row">
+        <textarea id="q" rows="1" placeholder="Where did they explain the main idea?"></textarea>
+        <button class="action primary" id="ask-go" type="submit">Ask</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="ask-note" id="ask-note" hidden></p>
+    </form>
+    <ol class="answers" id="answers"></ol>
+    <nav class="tabs" id="tabs" hidden></nav>
+    <section class="pane" data-pane="notes"><div id="request"></div></section>
+    <section class="pane" data-pane="transcript" hidden>
+      <input class="find" id="find" type="search" placeholder="Search what was said" autocomplete="off">
+      <p class="found" id="found"></p>
+      <ol class="script" id="script"></ol>
+    </section>
+    <section class="pane" data-pane="frames">
+      <h2 id="story-title">Talk track</h2>
+      <ol class="beats" id="beats"></ol>
+    </section>
     <div id="doc"></div>
     <details class="got" id="got"><summary>What Claude got</summary><pre id="summary"></pre></details>
   </aside>
@@ -227,7 +302,11 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
   let activeBeat = -1, activeLine = null, userScrolledAt = 0;
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  const clock = (t) => { t = Math.max(0, t || 0); return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`; };
+  const clock = (t) => {
+    t = Math.floor(Math.max(0, t || 0));
+    const two = (n) => String(n).padStart(2, "0");
+    return t >= 3600 ? `${Math.floor(t / 3600)}:${two(Math.floor(t % 3600 / 60))}:${two(t % 60)}` : `${Math.floor(t / 60)}:${two(t % 60)}`;
+  };
   const kinds = { video: "Screen recording", document: "Document", screenshot: "Screenshot", watch: "Watch session", listen: "Listen & ask session" };
   const unit = data.kind === "document" ? ["page", "pages"] : ["frame", "frames"];
   const plural = (n, [one, many]) => `${n} ${n === 1 ? one : many}`;
@@ -297,41 +376,46 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
 
   // A watch session's write-up sits above the talk track; its timestamps jump the video.
   const parseClock = (stamp) => stamp.split(":").reverse().reduce((total, part, i) => total + Number(part) * 60 ** i, 0);
+  const STAMP = /\d+:\d{2}(?::\d{2})?/g;
   function inline(node, text) {
-    const pattern = /(\*\*[^*]+\*\*)|(\[\d+:\d{2}(?::\d{2})?\])/g;
+    const pattern = /(\*\*[^*]+\*\*)|(\[\d+:\d{2}(?::\d{2})?(?:\s*(?:,|–|-|to|and)\s*\d+:\d{2}(?::\d{2})?)*\])/g;
     let last = 0, match;
     while ((match = pattern.exec(text))) {
       if (match.index > last) node.append(text.slice(last, match.index));
       if (match[1]) node.append(el("b", null, match[1].slice(2, -2)));
       else {
-        const stamp = match[2].slice(1, -1);
-        const button = el("button", "stamp-link", stamp);
-        button.type = "button";
-        button.addEventListener("click", () => seek(parseClock(stamp), true));
-        node.append(button);
+        match[2].match(STAMP).forEach((stamp, i) => {
+          if (i) node.append(" ");
+          const button = el("button", "stamp-link", stamp);
+          button.type = "button";
+          button.title = `Play from ${stamp}`;
+          button.addEventListener("click", () => seek(parseClock(stamp), true));
+          node.append(button);
+        });
       }
       last = pattern.lastIndex;
     }
     node.append(text.slice(last));
     return node;
   }
-  if (data.digest) {
-    const box = el("div", "digest");
+  // Light Markdown (headings, bullet and numbered lists, paragraphs) with clickable timestamps.
+  function markdown(text, box) {
     let list = null;
-    data.digest.split("\n").forEach((raw) => {
+    text.split("\n").forEach((raw) => {
       const line = raw.trim();
       if (!line) { list = null; return; }
       if (line.startsWith("#")) { list = null; box.append(el("h3", null, line.replace(/^#+\s*/, ""))); return; }
-      if (/^[-*]\s+/.test(line)) {
+      if (/^([-*]|\d+[.)])\s+/.test(line)) {
         if (!list) { list = el("ul"); box.append(list); }
-        list.append(inline(el("li"), line.replace(/^[-*]\s+/, "")));
+        list.append(inline(el("li"), line.replace(/^([-*]|\d+[.)])\s+/, "")));
         return;
       }
       list = null;
       box.append(inline(el("p"), line));
     });
-    $("#request").append(box);
+    return box;
   }
+  if (data.digest) $("#request").append(markdown(data.digest, el("div", "digest")));
 
   data.frames.forEach((frame, i) => {
     if (data.kind === "screenshot") return;
@@ -460,6 +544,237 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
     setTimeout(() => ($("#context").textContent = "Copy for Claude"), 1600);
   });
 
+  // Tabs: the write-up, the whole transcript, and the frames. Pages with one of these show it without tabs.
+  const panes = [...document.querySelectorAll(".pane")];
+  const tabs = [
+    data.digest && ["notes", "Notes", null],
+    data.cues.length > 0 && ["transcript", "Transcript", data.cues.length],
+    data.kind !== "screenshot" && data.frames.length > 0 && ["frames", "Frames", data.frames.length],
+  ].filter(Boolean);
+  function showPane(name) {
+    panes.forEach((p) => (p.hidden = p.dataset.pane !== name));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.pane === name));
+    try { localStorage.setItem("pointer-tab", name); } catch {}
+    if (name === "transcript") requestAnimationFrame(() => centre(scriptLine));
+  }
+  if (video && tabs.length > 1) {
+    const nav = $("#tabs");
+    nav.hidden = false;
+    tabs.forEach(([name, label, n]) => {
+      const b = el("button", "tab", label);
+      b.type = "button"; b.dataset.pane = name;
+      if (n) b.append(el("span", "n", n));
+      b.addEventListener("click", () => showPane(name));
+      nav.append(b);
+    });
+    let saved = null;
+    try { saved = localStorage.getItem("pointer-tab"); } catch {}
+    showPane(tabs.some((t) => t[0] === saved) ? saved : tabs[0][0]);
+  } else {
+    panes.forEach((p) => (p.hidden = false));
+  }
+
+  // Transcript: every line, searchable; the line being spoken is marked and kept in view.
+  const scriptEls = [];
+  let scriptLine = null;
+  if (data.cues.length) {
+    const list = $("#script");
+    data.cues.forEach((c) => {
+      const li = el("li", "line");
+      const b = el("button"); b.type = "button";
+      b.append(el("time", null, clock(c.start)));
+      if (c.speaker) b.append(el("span", `who ${c.speaker.toLowerCase()}`, c.speaker));
+      const q = el("q", null, c.text);
+      b.append(q);
+      b.addEventListener("click", () => seek(c.start, true));
+      li.append(b);
+      li.dataset.start = c.start; li.dataset.end = c.end;
+      li._q = q; li._text = c.text;
+      list.append(li);
+      scriptEls.push(li);
+    });
+    const found = $("#found");
+    found.textContent = `${data.cues.length} lines. Click one to play from there.`;
+    const find = $("#find");
+    let timer = 0;
+    find.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const words = find.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        let n = 0;
+        scriptEls.forEach((li) => {
+          const text = li._text, lower = text.toLowerCase();
+          const hit = words.every((w) => lower.includes(w));
+          li.hidden = words.length > 0 && !hit;
+          li._q.replaceChildren();
+          if (!words.length || !hit) { li._q.textContent = text; return; }
+          n++;
+          const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+          let last = 0, m;
+          while ((m = re.exec(text))) {
+            li._q.append(text.slice(last, m.index), el("mark", null, m[0]));
+            last = re.lastIndex;
+          }
+          li._q.append(text.slice(last));
+        });
+        found.textContent = words.length ? `${n} ${n === 1 ? "line" : "lines"} with “${find.value.trim()}”` : `${data.cues.length} lines. Click one to play from there.`;
+      }, 120);
+    });
+    list.addEventListener("wheel", () => (userScrolledAt = performance.now()), { passive: true });
+  }
+  // Scrolls the transcript box (not the page) so the line sits a third of the way down.
+  function centre(line, smooth) {
+    if (!line || line.hidden) return;
+    const box = $("#script");
+    box.scrollTo({ top: line.offsetTop - box.clientHeight / 3, behavior: smooth ? "smooth" : "auto" });
+  }
+  function follow(t) {
+    const line = scriptEls.find((n) => t >= +n.dataset.start && t < +n.dataset.end) || null;
+    if (line !== scriptLine) {
+      scriptLine?.classList.remove("on");
+      line?.classList.add("on");
+      scriptLine = line;
+      const pane = line && line.closest(".pane");
+      if (line && !line.hidden && pane && !pane.hidden && !video.paused && performance.now() - userScrolledAt > 3000) {
+        const box = $("#script"), top = line.offsetTop;
+        if (top < box.scrollTop + 40 || top > box.scrollTop + box.clientHeight - 80) centre(line, true);
+      }
+      const now = $("#now");
+      if (line) {
+        const cue = data.cues[scriptEls.indexOf(line)];
+        now.hidden = false;
+        now.replaceChildren(el("time", null, `${clock(cue.start)}${cue.speaker ? " · " + cue.speaker : ""}`), cue.text);
+      }
+    }
+  }
+
+  // Playback controls: skip, speed, and a link to the current moment for pasting into chat.
+  const folderName = decodeURIComponent(location.pathname.split("/").slice(-2, -1)[0] || "");
+  if (video) {
+    $("#controls").hidden = false;
+    let rate = 1;
+    try { rate = Number(localStorage.getItem("pointer-rate")) || 1; } catch {}
+    const rates = [...document.querySelectorAll("[data-rate]")];
+    const setRate = (r) => {
+      rate = r; video.playbackRate = r; video.defaultPlaybackRate = r;
+      rates.forEach((b) => b.classList.toggle("on", Number(b.dataset.rate) === r));
+      try { localStorage.setItem("pointer-rate", String(r)); } catch {}
+    };
+    setRate(rate);
+    video.addEventListener("loadedmetadata", () => setRate(rate));
+    rates.forEach((b) => b.addEventListener("click", () => setRate(Number(b.dataset.rate))));
+    document.querySelectorAll("[data-skip]").forEach((b) => b.addEventListener("click", () => seek(video.currentTime + Number(b.dataset.skip), !video.paused)));
+    $("#moment").addEventListener("click", async () => {
+      const at = clock(video.currentTime);
+      const text = `${data.title || when} at ${at}: pointer open ${folderName} --at ${at}`;
+      try { await navigator.clipboard.writeText(text); } catch {}
+      $("#moment").textContent = "Copied";
+      setTimeout(() => ($("#moment").textContent = "Copy moment"), 1600);
+    });
+    addEventListener("keydown", (e) => {
+      if (e.target.closest("input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "j") seek(video.currentTime - 10, !video.paused);
+      else if (e.key === "l") seek(video.currentTime + 10, !video.paused);
+      else if (e.key === "k") video.paused ? video.play() : video.pause();
+      else if (e.key === "/" && data.cues.length) {
+        e.preventDefault();
+        if (tabs.some((t) => t[0] === "transcript")) showPane("transcript");
+        $("#find").focus();
+      }
+    });
+    // #t=754 or #t=12:34 plays from that moment; chat sends you here with `pointer open <session> --at 12:34`.
+    const fromHash = () => {
+      const m = location.hash.match(/t=([\d:.]+)/);
+      if (!m) return;
+      const t = m[1].includes(":") ? parseClock(m[1]) : Number(m[1]);
+      const go = () => {
+        if (tabs.some((x) => x[0] === "transcript")) showPane("transcript");
+        seek(t, true);
+      };
+      video.readyState >= 1 ? go() : video.addEventListener("loadedmetadata", go, { once: true });
+    };
+    // Pointer's window calls this when it opens the page at a moment; from the app, play() is allowed sound.
+    window.pointerPlay = (t) => {
+      if (tabs.some((x) => x[0] === "transcript")) showPane("transcript");
+      seek(t, true);
+    };
+    addEventListener("hashchange", fromHash);
+    fromHash();
+  }
+
+  // Ask: questions about this session, answered by Claude from its notes, transcript and screen text.
+  const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ask;
+  const askable = data.kind !== "screenshot" && (data.cues.length || data.narration || data.digest) && !data.processing;
+  const answers = $("#answers");
+  const history = (data.asks || []).map((a) => ({ question: a.question, answer: a.answer }));
+  function answerEl(question, at) {
+    const li = el("li", "answer");
+    const q = el("p", "q", question);
+    if (at) q.append(el("time", null, new Date(at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })));
+    li.append(q, el("div", "a"));
+    return li;
+  }
+  if (askable) {
+    $("#ask").hidden = false;
+    (data.asks || []).slice().reverse().forEach((a, i) => {
+      const li = answerEl(a.question, a.at);
+      markdown(a.answer, li.querySelector(".a"));
+      if (i >= 3) li.hidden = true;
+      answers.append(li);
+    });
+    if ((data.asks || []).length > 3) {
+      const more = el("button", "more", `Show ${data.asks.length - 3} earlier questions`);
+      more.type = "button";
+      more.addEventListener("click", () => { answers.querySelectorAll(".answer").forEach((n) => (n.hidden = false)); more.remove(); });
+      answers.append(more);
+    }
+    const q = $("#q"), go = $("#ask-go");
+    const grow = () => { q.style.height = "auto"; q.style.height = `${Math.min(160, q.scrollHeight)}px`; };
+    q.addEventListener("input", grow);
+    q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#ask").requestSubmit(); } });
+    const suggestions = data.kind === "watch" || data.kind === "listen"
+      ? ["What were the main points?", "What should I act on?", "Which parts are worth replaying?"]
+      : ["What happens in this recording?", "What was said about the screen?"];
+    suggestions.forEach((text) => {
+      const c = el("button", "chip", text); c.type = "button";
+      c.addEventListener("click", () => { q.value = text; $("#ask").requestSubmit(); });
+      $("#chips").append(c);
+    });
+    if (!bridge) {
+      const note = $("#ask-note");
+      note.hidden = false;
+      note.textContent = "Asking runs in Pointer's own window. In a browser, use Copy for Claude and paste it into a chat.";
+      go.disabled = true;
+    }
+    $("#ask").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const question = q.value.trim();
+      if (!question || !bridge || go.disabled) return;
+      const li = answerEl(question, Date.now());
+      li.classList.add("pending");
+      li.querySelector(".a").textContent = "Reading the session…";
+      answers.prepend(li);
+      q.value = ""; grow();
+      go.disabled = true;
+      const started = performance.now();
+      const tick = setInterval(() => { li.querySelector(".a").textContent = `Reading the session… ${Math.round((performance.now() - started) / 1000)} s`; }, 1000);
+      try {
+        const answer = await bridge.postMessage({ question, history: history.slice(-6) });
+        li.classList.remove("pending");
+        li.querySelector(".a").replaceChildren();
+        markdown(String(answer), li.querySelector(".a"));
+        history.push({ question, answer: String(answer) });
+      } catch (err) {
+        li.classList.remove("pending");
+        li.classList.add("failed");
+        li.querySelector(".a").textContent = String(err && err.message || err);
+      } finally {
+        clearInterval(tick);
+        go.disabled = false;
+      }
+    });
+  }
+
   // Tape
   if (video) {
     const track = $("#track");
@@ -492,6 +807,7 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
     });
   }
 
+
   // Playback sync
   addEventListener("wheel", () => (userScrolledAt = performance.now()), { passive: true });
   addEventListener("touchmove", () => (userScrolledAt = performance.now()), { passive: true });
@@ -507,8 +823,9 @@ kbd { font: 600 11.5px/1 var(--ui); padding: 2px 5px; border-radius: 4px; box-sh
       beatEls.forEach((n, i) => n.classList.toggle("on", i === b));
       document.querySelectorAll(".pin").forEach((n, i) => n.classList.toggle("on", i === b));
       activeBeat = b;
-      if (!video.paused && beatEls[b] && performance.now() - userScrolledAt > 3000) beatEls[b].scrollIntoView({ block: "nearest", behavior: "smooth" });
+      if (!video.paused && beatEls[b] && !beatEls[b].closest(".pane").hidden && performance.now() - userScrolledAt > 3000) beatEls[b].scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
+    follow(t);
     const line = lineEls.find((n) => t >= +n.dataset.start && t < +n.dataset.end) || null;
     if (line !== activeLine) {
       activeLine?.classList.remove("on");

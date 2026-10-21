@@ -503,14 +503,20 @@ final class WatchSession: ActiveCapture {
         return frames
     }
 
-    /// Words grouped into lines: same speaker, less than 1.5 s apart.
+    /// Words grouped into lines: same speaker, less than 1.5 s apart. A line also ends at a sentence once it has run
+    /// 8 s, and at 25 s regardless, so someone talking without pauses still gives lines you can jump to.
     private func utterances(from words: [SpeechStream.Word], started: Date) -> [SessionPage.Cue] {
         var cues: [SessionPage.Cue] = []
         var current: (speaker: String, start: Double, end: Double, words: [String])?
         for word in words.sorted(by: { $0.start < $1.start }) {
             let at = word.start
             let speaker = word.speaker
-            if var open = current, open.speaker == speaker, at - open.end < 1.5 {
+            let full = current.map { open in
+                let run = at - open.start
+                let sentence = open.words.last?.trimmingCharacters(in: .whitespaces).last.map { ".?!".contains($0) } ?? false
+                return run >= 25 || (run >= 8 && sentence)
+            } ?? false
+            if var open = current, open.speaker == speaker, at - open.end < 1.5, !full {
                 open.end = at + word.duration
                 open.words.append(word.text)
                 current = open

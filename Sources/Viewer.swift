@@ -49,6 +49,13 @@ struct SessionPage: Codable {
         var text: String
     }
     var questions: [Question]?
+    /// Questions asked about the session afterwards from its page, with Claude's answers.
+    struct Ask: Codable {
+        var at: Date
+        var question: String
+        var answer: String
+    }
+    var asks: [Ask]?
     /// True while the capture is still being written up, so the library can show it straight away.
     var processing: Bool?
 }
@@ -109,6 +116,12 @@ enum Viewer {
     }
 
     static let libraryChanged = Notification.Name("PointerLibraryChanged")
+
+    /// Re-renders one capture's page from its session.json with the current template.
+    static func refresh(folder: URL) {
+        guard let page = load(folder.appendingPathComponent("session.json")) else { return }
+        render(page, to: folder.appendingPathComponent("index.html"))
+    }
 
     /// A label for a session that never got one: what was said, the document it came from, or where it was taken.
     static func label(for page: SessionPage) -> String? {
@@ -212,11 +225,13 @@ enum Viewer {
 
     /// Writes the page from the current template, so pages pick up template changes on every library rebuild.
     private static func render(_ page: SessionPage, to html: URL) {
-        guard let data = try? encoder.encode(page), let text = fill("session", with: data) else { return }
+        var shown = page
+        shown.cues = Cues.fine(page.cues)
+        guard let data = try? encoder.encode(shown), let text = fill("session", with: data) else { return }
         try? text.write(to: html, atomically: true, encoding: .utf8)
     }
 
-    private static func load(_ url: URL) -> SessionPage? {
+    static func load(_ url: URL) -> SessionPage? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? decoder.decode(SessionPage.self, from: data)
     }

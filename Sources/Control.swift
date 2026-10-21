@@ -12,7 +12,7 @@ enum Control {
     /// The CLI side: posts the request, waits for the reply, prints it, and returns the exit code.
     static func send(_ args: [String]) -> Int32 {
         guard let cmd = args.first else {
-            print("usage: Pointer --ctl targets | start [<screen, window or follow>] [--listen] | stop | cancel | status | peek")
+            print("usage: Pointer --ctl targets | start [<screen, window or follow>] [--listen] | stop | cancel | status | peek | open [<session>] [--at m:ss]")
             return 2
         }
         guard NSRunningApplication.runningApplications(withBundleIdentifier: "com.vaibhav.pointer")
@@ -23,11 +23,18 @@ enum Control {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let id = UUID().uuidString
         let reply = folder.appendingPathComponent("\(id).json")
-        let rest = Array(args.dropFirst())
+        var rest = Array(args.dropFirst())
+        // `--at 12:34` (open): the moment to play from.
+        var at = ""
+        if let i = rest.firstIndex(of: "--at"), i + 1 < rest.count {
+            at = rest[i + 1]
+            rest.removeSubrange(i...(i + 1))
+        }
         let info: [String: String] = [
             "id": id, "cmd": cmd,
             "target": rest.filter { !$0.hasPrefix("--") }.joined(separator: " "),
             "listen": rest.contains("--listen") ? "1" : "0",
+            "at": at,
         ]
         DistributedNotificationCenter.default().postNotificationName(name, object: nil, userInfo: info, deliverImmediately: true)
         let deadline = Date().addingTimeInterval(20)
@@ -49,6 +56,25 @@ enum Control {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         guard let data = try? JSONSerialization.data(withJSONObject: body, options: [.prettyPrinted, .sortedKeys]) else { return }
         try? data.write(to: folder.appendingPathComponent("\(id).json"), options: .atomic)
+    }
+
+    /// A session folder from what the chat typed: a path, a folder name (or its start), "latest", or empty for latest.
+    static func session(_ text: String) -> URL? {
+        let root = folder.deletingLastPathComponent()
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        if typed.hasPrefix("/") { return URL(fileURLWithPath: typed) }
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
+            .filter { FileManager.default.fileExists(atPath: root.appendingPathComponent("\($0)/session.json").path) }
+            .sorted()
+        let name = typed.isEmpty || typed == "latest" ? names.last : names.last { $0.hasPrefix(typed) }
+        return name.map { root.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    /// "1:02:05", "12:34", "754" or "754s" as seconds.
+    static func seconds(_ text: String) -> Double? {
+        let parts = text.trimmingCharacters(in: CharacterSet(charactersIn: "s ")).split(separator: ":").map { Double($0) }
+        guard !parts.isEmpty, !parts.contains(nil) else { return nil }
+        return parts.compactMap { $0 }.reduce(0) { $0 * 60 + $1 }
     }
 
     /// A screen or window that a session can follow, as listed by `targets`.

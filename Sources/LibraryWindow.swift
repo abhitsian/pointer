@@ -29,10 +29,21 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
         }
     }
 
-    /// Shows one page (the library or a capture's page) in the window.
-    func show(_ page: URL) {
+    /// Shows one page (the library or a capture's page) in the window, optionally at a moment in its recording.
+    func show(_ page: URL, at seconds: Double? = nil) {
         let web = makeWindowIfNeeded()
-        web.loadFileURL(page, allowingReadAccessTo: root)
+        if let seconds, var parts = URLComponents(url: page, resolvingAgainstBaseURL: false) {
+            parts.fragment = "t=\(Int(seconds))"
+            if web.url?.path == page.path {
+                // Same page: move the playhead without reloading, so playback state and scroll stay.
+                web.evaluateJavaScript("history.replaceState(null, '', '#t=\(Int(seconds))'); window.pointerPlay && pointerPlay(\(Int(seconds)))")
+            } else if let url = parts.url {
+                playOnLoad = seconds
+                web.loadFileURL(url, allowingReadAccessTo: root)
+            }
+        } else {
+            web.loadFileURL(page, allowingReadAccessTo: root)
+        }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
@@ -82,6 +93,8 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
         config.userContentController.addUserScript(WKUserScript(source: """
             navigator.clipboard.writeText = (text) => { window.webkit.messageHandlers.copy.postMessage(String(text)); return Promise.resolve(); };
             """, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        // Ask about this session: the page posts the question and gets Claude's answer back as the promise's value.
+        config.userContentController.addScriptMessageHandler(AskBridge(), contentWorld: .page, name: "ask")
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.mediaTypesRequiringUserActionForPlayback = []
         let web = WKWebView(frame: .zero, configuration: config)
@@ -145,7 +158,15 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
         decisionHandler(.cancel)
     }
 
+    /// Set by `show(_:at:)`: once the page loads, play from here. The page can't start playback with sound
+    /// itself, but script the app runs counts as a user gesture, so WebKit allows it.
+    private var playOnLoad: Double?
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let t = playOnLoad {
+            playOnLoad = nil
+            webView.evaluateJavaScript("window.pointerPlay && pointerPlay(\(t))")
+        }
         window?.title = webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Pointer"
         if let y = restoreScroll {
             restoreScroll = nil
@@ -157,6 +178,27 @@ final class LibraryWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKS
         guard let text = message.body as? String else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// Receives a session page's question, answers it with `claude` in the background, and resolves the page's promise.
+final class AskBridge: NSObject, WKScriptMessageHandlerWithReply {
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
+                               replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        guard let body = message.body as? [String: Any], let question = body["question"] as? String,
+              let page = message.frameInfo.request.url, page.isFileURL else {
+            return replyHandler(nil, "Bad request")
+        }
+        let folder = page.deletingLastPathComponent()
+        let history = (body["history"] as? [[String: String]] ?? []).compactMap { turn in
+            turn["question"].flatMap { q in turn["answer"].map { Ask.Turn(question: q, answer: $0) } }
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let answer = Ask.answer(question, history: history, folder: folder)
+            DispatchQueue.main.async {
+                if let answer { replyHandler(answer, nil) } else { replyHandler(nil, "Claude did not answer. See ~/Library/Logs/Pointer.log.") }
+            }
+        }
     }
 }
 

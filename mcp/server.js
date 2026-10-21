@@ -13,7 +13,30 @@ const STAMP = /^(\d{4}-\d\d-\d\d)_(\d\d)-(\d\d)-(\d\d)(?:-(\w+))?$/;
 
 const read = (file) => { try { return fs.readFileSync(file, "utf8"); } catch { return null; } };
 const json = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
-const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+const two = (n) => String(n).padStart(2, "0");
+const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); return t >= 3600 ? `${Math.floor(t / 3600)}:${two(Math.floor(t % 3600 / 60))}:${two(t % 60)}` : `${Math.floor(t / 60)}:${two(t % 60)}`; };
+
+// Long transcript lines (a speaker talking without pausing) cut at sentence ends, each sentence placed by its
+// position in the line, so a search hit or citation lands within seconds of the words. Same rule as the app.
+function fine(cues) {
+  return cues.flatMap((c) => {
+    const span = c.end - c.start, text = c.text || "", total = Math.max(1, text.length);
+    if (span <= 15) return [c];
+    const pieces = [];
+    let start = 0;
+    for (const m of text.matchAll(/[.?!]+["')\]]*\s+/g)) { pieces.push({ offset: start, text: text.slice(start, m.index + m[0].length) }); start = m.index + m[0].length; }
+    if (start < text.length) pieces.push({ offset: start, text: text.slice(start) });
+    const merged = [];
+    for (const p of pieces) {
+      const last = merged[merged.length - 1];
+      if (last && (last.text.length < 60 || ((p.offset - last.offset) / total) * span < 4)) last.text += p.text;
+      else merged.push({ ...p });
+    }
+    if (merged.length < 2) return [c];
+    return merged.map((p, i) => ({ ...c, start: c.start + (p.offset / total) * span,
+      end: i + 1 < merged.length ? c.start + (merged[i + 1].offset / total) * span : c.end, text: p.text.trim() }));
+  });
+}
 const seconds = (mmss) => mmss.split(":").reduce((a, b) => a * 60 + Number(b), 0);
 
 // Every capture: a folder (watch, video, document) or a loose screenshot (<stamp>.png + <stamp>.json).
@@ -76,6 +99,8 @@ function summary(c) {
 
 // What was said, as timed lines.
 function said(c) {
+  const timed = c.dir && (c.page.cues || []).length ? fine(c.page.cues) : null;
+  if (timed) return timed.map((q) => ({ time: q.start, text: `${q.speaker ? q.speaker + ": " : ""}${q.text}` }));
   const text = c.transcript ? c.transcript.join("\n") : c.dir && read(path.join(c.dir, "transcript.txt"));
   if (text) {
     return text.split("\n").filter(Boolean).map((line) => {
@@ -158,6 +183,7 @@ function get(a) {
   const parts = a.parts && a.parts.length ? a.parts : ["digest", "timeline"];
   const s = summary(c);
   const out = [`# ${s.title}`, `${s.kind} · ${s.created}${s.minutes != null ? ` · ${s.minutes} min` : ""} · page: ${s.page}`];
+  if (c.dir && c.page.video) out.push(`To play it from a moment in Pointer's window: \`pointer open ${c.id} --at <m:ss>\``);
   if (parts.includes("digest")) { const d = digest(c); if (d) out.push("\n## Write-up\n" + d.trim()); }
   if (parts.includes("timeline")) {
     // What was said and what was on screen, merged in time order, so the moment can be reconstructed.
